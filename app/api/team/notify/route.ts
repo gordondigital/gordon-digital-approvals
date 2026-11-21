@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   const link = await reviewLinkFor(clientId, me.email);
   const d = describeItems(client, items);
   const first = String(client.approverName || "").split(" ")[0];
-  await emails.batchReady(to, String(client.name || ""), d.what, d.where, link, first, await strategistOf(client));
+  const sentFrom = await emails.batchReady(to, String(client.name || ""), d.what, d.where, link, first, await strategistOf(client));
   await logEvent({ client_id: clientId, type: "sent", actor_name: me.name, actor_email: me.email, meta: { items: ids, to } });
-  return NextResponse.json({ ok: true, sent: items.length, to });
+  return NextResponse.json({ ok: true, sent: items.length, to, from: sentFrom });
 }

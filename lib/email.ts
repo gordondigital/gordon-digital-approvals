@@ -33,13 +33,15 @@ const toText = (html: string) =>
  * Client facing emails (work ready, reminders) go from the strategist's own Gmail when they have an
  * @gordondigital.com.au address and Gmail sending is set up. Anything else, or if Gmail fails, goes through Resend.
  */
-async function send(to: string[], subject: string, html: string, from?: Sender) {
+async function send(to: string[], subject: string, html: string, from?: Sender): Promise<string> {
   const list = Array.from(new Set(to.filter(Boolean)));
-  if (!list.length) return;
+  if (!list.length) return "";
+  if (from?.email && !isTeamEmail(from.email)) console.log(`[email] ${from.email} isn't a team address, sending from Resend`);
+  if (from?.email && isTeamEmail(from.email) && !gmailReady()) console.log("[email] GOOGLE_SERVICE_ACCOUNT_JSON isn't set, sending from Resend");
   if (from && from.email && isTeamEmail(from.email) && gmailReady()) {
     try {
       await gmailSend({ name: from.name, email: from.email }, list, subject, html, toText(html));
-      return;
+      return from.email;
     } catch (e) {
       console.error("[gmail] falling back to Resend:", e);
     }
@@ -47,7 +49,7 @@ async function send(to: string[], subject: string, html: string, from?: Sender) 
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     console.log("[email skipped]", subject, list);
-    return;
+    return "";
   }
   const resend = new Resend(key);
   const { error } = await resend.emails.send({
@@ -57,7 +59,11 @@ async function send(to: string[], subject: string, html: string, from?: Sender) 
     subject,
     html,
   });
-  if (error) console.error("[email error]", error);
+  if (error) {
+    console.error("[email error]", error);
+    return "";
+  }
+  return "approvals@notify";
 }
 
 const signoff = (from?: Sender) =>

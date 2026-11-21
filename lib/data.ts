@@ -49,11 +49,19 @@ export async function reviewLinkFor(clientId: string, createdBy?: string): Promi
 
 /** The strategist on this client, with their details from the Team page. Client emails go out from them. */
 export async function strategistOf(client: Json): Promise<{ name: string; email: string; title?: string; phone?: string } | null> {
-  const s = String(client.strategist || "");
-  if (!s) return null;
+  const s = String(client.strategist || "").trim();
   const team = await getTeamSettings();
-  const p = (((team?.people as Json) || {}) as Record<string, { email?: string; title?: string; phone?: string }>)[s] || {};
-  return { name: s, email: String(p.email || "").trim().toLowerCase(), title: p.title, phone: p.phone };
+  const people = (((team?.people as Json) || {}) as Record<string, { email?: string; title?: string; phone?: string }>);
+  const key = Object.keys(people).find((k) => k.trim().toLowerCase() === s.toLowerCase());
+  const p = (key && people[key]) || {};
+  // Older clients may have a contact email saved on the client itself.
+  const email = String(p.email || client.gdEmail || "").trim().toLowerCase();
+  if (!s && !email) {
+    console.log(`[email] ${client.name}: no strategist on this client, sending from Resend`);
+    return null;
+  }
+  if (!email) console.log(`[email] ${client.name}: strategist "${s}" has no email on the Team page, sending from Resend`);
+  return { name: s || "Gordon Digital", email, title: p.title, phone: p.phone || (client.gdPhone as string | undefined) };
 }
 
 /** Emails for the people at Gordon Digital who look after this client. */

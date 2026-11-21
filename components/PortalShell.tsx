@@ -61,7 +61,7 @@ function teamBackend(me: { id: string; name: string }) {
         .then((r) => {
           const G = (window as any).GDA;
           if (r.warning) G?.toast?.(r.warning);
-          else if (r.to?.length) G?.toast?.(`Emailed ${r.to.join(", ")}`);
+          else if (r.to?.length) G?.toast?.(`Emailed ${r.to.join(", ")}${r.from ? " from " + r.from : ""}`);
         })
         .catch((e) => (window as any).GDA?.toast?.("Sent, but the email didn't go: " + e.message)),
     );
