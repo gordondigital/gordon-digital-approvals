@@ -51,6 +51,7 @@ function teamBackend(me: { id: string; name: string }) {
   let notifyT: any = null;
   const listeners = new Set<() => void>();
   let changeT: any = null;
+  const queues: Record<string, Promise<void>> = {};
 
   const flushNotify = () => {
     const q = notifyQ;
@@ -131,7 +132,13 @@ function teamBackend(me: { id: string; name: string }) {
         }
         return snap(row.data);
       },
-      async set(obj: any) {
+      set(obj: any) {
+        // Saves to the same record go one after another, so a slower earlier save can't overwrite a later one.
+        const run = (queues[path] || Promise.resolve()).catch(() => {}).then(() => this.write(obj));
+        queues[path] = run;
+        return run;
+      },
+      async write(obj: any) {
         if (col === "index") return;
         if (!t) throw new Error("Unknown collection " + col);
         const data = { ...obj };
@@ -198,6 +205,7 @@ function clientBackend(token: string, clientId: string) {
   const versions: Record<string, string> = {};
   const listeners = new Set<() => void>();
   const sb = createBrowserClient(sbUrl, sbAnon);
+  const queues: Record<string, Promise<void>> = {};
 
   const load = () =>
     (loading = api(base + "/data").then((d) => {
@@ -256,10 +264,12 @@ function clientBackend(token: string, clientId: string) {
         if (col === "clients" || col === "ads") return snap((cache[col] || {})[id] || null);
         return snap(null);
       },
-      async set(obj: any) {
-        if (col === "index") return;
-        if (col !== "ads" && col !== "clients") throw new Error("You can't change that.");
-        return save(col, id, obj);
+      set(obj: any) {
+        if (col === "index") return Promise.resolve();
+        if (col !== "ads" && col !== "clients") return Promise.reject(new Error("You can't change that."));
+        const run = (queues[path] || Promise.resolve()).catch(() => {}).then(() => save(col, id, obj));
+        queues[path] = run;
+        return run;
       },
       async update() {},
       async delete() {

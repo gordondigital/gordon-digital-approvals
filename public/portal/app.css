@@ -465,3 +465,10 @@ body.gda-client .seg,body.gda-client #as-client{display:none!important}
 .gda-err{color:var(--warn);margin:0;min-height:1em}
 .top-right form{margin:0}
 @media (prefers-color-scheme: dark){.gate-logo.lt{display:none}.gate-logo.dk{display:block}}
+
+.sbars{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:4px;z-index:2}
+.sbars i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.4)}
+.sbars i.on{background:#fff}
+.shl{font-weight:700;font-size:14px}
+.snav{display:flex;align-items:center;justify-content:space-between;gap:8px;width:380px;max-width:100%}
+.story{position:relative}

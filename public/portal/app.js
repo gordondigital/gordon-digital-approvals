@@ -94,8 +94,15 @@ function fetchProfiles(){var ids=Object.keys(pendingIds);if(!ids.length||!user)r
 
 /* ---------- render ---------- */
 function editing(){var el=document.activeElement;return el&&el.closest&&el.closest("main,nav")&&((/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)&&el.type!=="file"&&el.type!=="checkbox")||el.isContentEditable);}
-function schedule(){if(editing()){dirty=true;return;}render();}
-document.addEventListener("focusout",function(){setTimeout(function(){if(dirty&&!editing()){dirty=false;render();}},180);});
+var picking=0;
+function busy(){if(picking&&Date.now()<picking)return true;var vs=document.querySelectorAll("main video");for(var i=0;i<vs.length;i++){if(!vs[i].paused&&!vs[i].ended)return true;}return false;}
+function schedule(){if(editing()||busy()){dirty=true;return;}render();}
+function flushDirty(){setTimeout(function(){if(dirty&&!editing()&&!busy()){dirty=false;render();}},250);}
+document.addEventListener("click",function(e){var t=e.target;if(t&&t.tagName==="INPUT"&&t.type==="file"){picking=Date.now()+5*60*1000;}},true);
+document.addEventListener("change",function(e){var t=e.target;if(t&&t.tagName==="INPUT"&&t.type==="file"){picking=0;flushDirty();}},true);
+window.addEventListener("focus",function(){if(picking){setTimeout(function(){picking=0;flushDirty();},1500);}});
+document.addEventListener("pause",flushDirty,true);document.addEventListener("ended",flushDirty,true);
+document.addEventListener("focusout",function(){setTimeout(function(){if(dirty&&!editing()&&!busy()){dirty=false;render();}},180);});
 
 function render(){
   var main=document.getElementById("main"),nav=document.getElementById("nav");
@@ -137,10 +144,14 @@ var ICON_HEART='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stro
 var ICON_CHAT='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 18l1.5-3.5A7.5 7.5 0 1 1 9 18.5z"/></svg>';
 var ICON_SEND='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/></svg>';
 function isVertical(){return S.placement==="story"||S.placement==="reel";}
+/* Carousel cards: 9:16 files are the Stories and Reels versions, everything else is a feed card. */
+function isStoryCard(cd){if(!cd)return false;if(cd.ratio==="9:16")return true;return !cd.ratioPicked&&cd.w&&cd.h&&cd.h/cd.w>1.5;}
+function feedCards(a){return a.creatives.filter(function(cd){return !isStoryCard(cd);});}
+function storyCards(a){return a.creatives.filter(function(cd){return cd.assetId&&isStoryCard(cd);});}
 function pickMedia(a){var want=isVertical()?"9:16":"1:1";return a.creatives.filter(function(c){return c.assetId&&c.ratio===want;})[0]||null;}
 function mediaHtml(m,a,vertical){
   var st=vertical?"padding:0;object-fit:cover":"padding:0;aspect-ratio:1/1;object-fit:cover";
-  if(m){return m.isVideo?'<video class="media" style="'+st+'" src="'+esc(blob(m.assetId))+'" muted autoplay loop playsinline></video>':'<img class="media" style="'+st+'" src="'+esc(blob(m.assetId))+'" alt="Ad creative">';}
+  if(m){return m.isVideo?'<video class="media" style="'+st+'" src="'+esc(blob(m.assetId))+'" controls playsinline loop preload="metadata"></video>':'<img class="media" style="'+st+'" src="'+esc(blob(m.assetId))+'" alt="Ad creative">';}
   return '<div class="media" style="'+(vertical?"":"aspect-ratio:1/1")+'">No '+(vertical?"9:16":"1:1")+' file uploaded yet\n'+(vertical?"Stories and Reels use a 9:16 file":"Facebook and Instagram feeds use a 1:1 file")+'</div>';
 }
 /* Cut the text where the platform does: a character limit and a line limit, whichever comes first. */
@@ -164,9 +175,10 @@ function previewHtml(a,c){
   
   var fbT=platformCut(full,125,3),igT=platformCut(full,125,2),stT=platformCut(full.replace(/\n+/g," "),90,2),rlT=platformCut(full.replace(/\n+/g," "),72,1);
   var more=function(x,word){return esc(x.text)+(x.cut?'<span class="moretxt">... '+word+'</span>':"");};
-  var cards=a.type==="CAROUSEL"?a.creatives:null;
+  if(S.lastPvAd!==a.id){S.lastPvAd=a.id;S.sci=0;}
+  var cards=a.type==="CAROUSEL"?feedCards(a):null,vcards=a.type==="CAROUSEL"?storyCards(a):[];
   var cardStrip=function(){return '<div class="car" aria-label="Carousel cards, scroll sideways">'+cards.map(function(cd,ci){
-      var src=cd.assetId?(cd.isVideo?'<video class="media" style="padding:0;aspect-ratio:1/1;object-fit:cover" src="'+esc(blob(cd.assetId))+'" muted autoplay loop playsinline></video>':'<img class="media" style="padding:0;aspect-ratio:1/1;object-fit:cover" src="'+esc(blob(cd.assetId))+'" alt="Card '+(ci+1)+'">'):'<div class="media" style="aspect-ratio:1/1">Card '+(ci+1)+'\n(no file yet)</div>';
+      var src=cd.assetId?(cd.isVideo?'<video class="media" style="padding:0;aspect-ratio:1/1;object-fit:cover" src="'+esc(blob(cd.assetId))+'" controls playsinline loop preload="metadata"></video>':'<img class="media" style="padding:0;aspect-ratio:1/1;object-fit:cover" src="'+esc(blob(cd.assetId))+'" alt="Card '+(ci+1)+'">'):'<div class="media" style="aspect-ratio:1/1">Card '+(ci+1)+'\n(no file yet)</div>';
       return '<div class="card-c">'+src+'<div class="ft"><div style="min-width:0"><div class="hl one">'+esc(cd.cardHeadline||hlText)+'</div><div class="ds">Card '+(ci+1)+' of '+cards.length+'</div></div><span class="cta">'+esc(a.cta)+'</span></div></div>';}).join("")+'</div>';};
   if(cards&&!isVertical()){
     var ig=S.placement==="ig";
@@ -175,15 +187,23 @@ function previewHtml(a,c){
     out+='<div class="fb"><div class="hd">'+av+'<div><div class="nm">'+esc(c.name)+'</div><div class="sp">Sponsored</div></div></div><div class="bd">'+more(fbT,"See more")+'</div>'+mediaHtml(pickMedia(a),a,false)+'<div class="ft"><div style="min-width:0"><div class="dm one">'+domain+'</div><div class="hl one">'+esc(hlText)+'</div><div class="ds one">'+esc(a.description.text)+'</div></div><span class="cta">'+esc(a.cta)+'</span></div></div>';
   }else if(S.placement==="ig"){
     out+='<div class="fb ig"><div class="hd">'+av+'<div><div class="nm">'+handle+'</div><div class="sp">Sponsored</div></div></div>'+mediaHtml(pickMedia(a),a,false)+'<div class="igcta"><span>'+esc(a.cta)+'</span><span aria-hidden="true">›</span></div><div class="bd" style="padding-top:10px"><b>'+handle+'</b> '+more(igT,"more")+'</div></div>';
+  }else if(cards&&vcards.length){
+    var si=Math.max(0,Math.min(S.sci||0,vcards.length-1)),cur=vcards[si],reel=S.placement==="reel";
+    var bars='<div class="sbars" aria-hidden="true">'+vcards.map(function(x,k){return '<i class="'+(k<=si?"on":"")+'"></i>';}).join("")+'</div>';
+    var nav=vcards.length>1?'<div class="snav"><button type="button" class="btn sm" data-act="storyCard" data-v="-1"'+(si===0?" disabled":"")+'>‹ Previous card</button><span class="small muted">Card '+(si+1)+' of '+vcards.length+'</span><button type="button" class="btn sm" data-act="storyCard" data-v="1"'+(si===vcards.length-1?" disabled":"")+'>Next card ›</button></div>':'';
+    var hl='<div class="shl">'+esc(cur.cardHeadline||hlText)+'</div>';
+    if(reel)out+='<div class="story reel">'+bars+mediaHtml(cur,a,true)+'<div class="rside" aria-hidden="true">'+ICON_HEART+ICON_CHAT+ICON_SEND+'</div><div class="rb"><div class="row" style="gap:8px">'+avSm+'<b>'+handle+'</b><span style="font-size:12px;opacity:.85">Sponsored</span></div><div>'+more(rlT,"more")+'</div>'+hl+'<div class="rcta">'+esc(a.cta)+' <span aria-hidden="true">›</span></div></div></div>';
+    else out+='<div class="story">'+bars+mediaHtml(cur,a,true)+'<div class="sh">'+avSm+esc(c.name)+' <span style="font-weight:400">Sponsored</span></div><div class="sb"><span>'+more(stT,"more")+'</span>'+hl+'<span class="c">'+esc(a.cta)+'</span></div></div>';
+    out+=nav;
   }else if(S.placement==="story"){
     var sm=cards?(cards.filter(function(x){return x.assetId;})[0]||null):pickMedia(a);
     var smHtml=mediaHtml(sm,a,true);if(cards&&sm)smHtml=smHtml.replace("object-fit:cover","object-fit:contain;background:#000");
     out+='<div class="story">'+smHtml+'<div class="sh">'+avSm+esc(c.name)+' <span style="font-weight:400">Sponsored</span></div><div class="sb"><span>'+more(stT,"more")+'</span><span class="c">'+esc(a.cta)+'</span></div></div>';
-    if(cards)out+='<p class="small" style="width:380px;max-width:100%">Carousel cards are 1:1, so Stories shows them one at a time with bars. Upload a 9:16 version if you want a full screen Stories ad.</p>';
+    if(cards)out+='<p class="small" style="width:380px;max-width:100%">Carousel cards are 1:1, so Stories shows them one at a time with bars. Upload 9:16 versions of the cards for full screen Stories and Reels.</p>';
   }else{
     var rm=cards?null:pickMedia(a);
     out+='<div class="story reel">'+mediaHtml(rm,a,true)+'<div class="rside" aria-hidden="true">'+ICON_HEART+ICON_CHAT+ICON_SEND+'</div><div class="rb"><div class="row" style="gap:8px">'+avSm+'<b>'+handle+'</b><span style="font-size:12px;opacity:.85">Sponsored</span></div><div>'+more(rlT,"more")+'</div><div class="rcta">'+esc(a.cta)+' <span aria-hidden="true">›</span></div></div></div>';
-    if(cards)out+='<p class="small" style="width:380px;max-width:100%">Carousels don\'t run in Reels, so this placement is skipped for this ad.</p>';
+    if(cards)out+='<p class="small" style="width:380px;max-width:100%">No 9:16 cards uploaded yet. Upload 9:16 versions of the cards to show them here.</p>';
   }
   var where=S.placement==="fb"?"Facebook":(S.placement==="ig"?"Instagram":(S.placement==="story"?"Stories":"Reels"));
   var vnum=function(arr,i){return S.mode==="client"?arr.slice(0,i+1).filter(hasText).length:i+1;};
@@ -413,15 +433,15 @@ function socialPreview(a,c){
   var arOf=function(f){if(!f||!f.w||!f.h)return null;var r=f.w/f.h;return Math.max(0.8,Math.min(1.91,r));};
   var media=function(sq){if(!files.length)return '<div class="media" style="aspect-ratio:'+(sq?"1/1":"4/5")+'">No image or video yet</div>';
     var base=arOf(files[0])||(sq?1:0.8);
-    var one=function(f,ar){var st='padding:0;aspect-ratio:'+ar+';object-fit:cover';return f.isVideo?'<video class="media" style="'+st+'" src="'+esc(blob(f.assetId))+'" muted autoplay loop playsinline></video>':'<img class="media" style="'+st+'" src="'+esc(blob(f.assetId))+'" alt="Post image">';};
+    var one=function(f,ar){var st='padding:0;aspect-ratio:'+ar+';object-fit:cover';return f.isVideo?'<video class="media" style="'+st+'" src="'+esc(blob(f.assetId))+'" controls playsinline loop preload="metadata"></video>':'<img class="media" style="'+st+'" src="'+esc(blob(f.assetId))+'" alt="Post image">';};
     if(files.length===1)return one(files[0],base);
     return '<div class="car" style="padding:0 0 8px">'+files.map(function(f){return '<div class="card-c" style="flex-basis:300px;border:0;border-radius:0">'+one(f,base)+'</div>';}).join("")+'</div>';};
   var more=function(x,w){return esc(x.text)+(x.cut?'<span class="moretxt">... '+w+'</span>':"");};
   var when=a.postDate?postWhen(a):"Scheduled";
   var out='<label class="vpick plc" for="pv-splat"><span>Platform</span><select class="in" id="pv-splat" data-splatview="1">'+plats.map(function(x){return '<option'+(x===p?" selected":"")+'>'+x+'</option>';}).join("")+'</select></label>';
   if(p==="Instagram")out+='<div class="fb ig"><div class="hd">'+av+'<div><div class="nm">'+handle+'</div></div></div>'+media(false)+'<div class="bd" style="padding-top:10px"><b>'+handle+'</b> '+more(platformCut(full,125,2),"more")+'</div>'+fcHtml(a,handle,true)+'<div class="bd sp" style="padding-top:0">'+esc(when)+'</div></div>';
-  else if(p==="Pinterest"){var pf=files[0];var pt=String(full).split("\n").filter(function(x){return x.trim();});out+='<div class="pin-card">'+(pf?(pf.isVideo?'<video src="'+esc(blob(pf.assetId))+'" muted autoplay loop playsinline></video>':'<img src="'+esc(blob(pf.assetId))+'" alt="Pin image">'):'<div class="media" style="aspect-ratio:2/3">No image yet</div>')+'<div class="pc-b"><b>'+esc(a.title||"")+'</b><p>'+esc(platformCut((pt.slice(0).join(" ")),100,2).text)+(full.length>100?"...":"")+'</p><div class="row" style="gap:8px">'+av.replace('class="av"','class="av" style="width:28px;height:28px"')+'<span class="small">'+esc(c.name)+'</span></div></div></div>';}
-  else if(p==="TikTok"){var f0=files[0];out+='<div class="story reel">'+(f0?(f0.isVideo?'<video class="media" style="padding:0;object-fit:cover" src="'+esc(blob(f0.assetId))+'" muted autoplay loop playsinline></video>':'<img class="media" style="padding:0;object-fit:cover" src="'+esc(blob(f0.assetId))+'" alt="">'):'<div class="media">No 9:16 video yet</div>')+'<div class="rside" aria-hidden="true">'+ICON_HEART+ICON_CHAT+ICON_SEND+'</div><div class="rb"><b>@'+handle+'</b><div>'+more(platformCut(full.replace(/\n+/g," "),80,2),"more")+'</div></div></div>';}
+  else if(p==="Pinterest"){var pf=files[0];var pt=String(full).split("\n").filter(function(x){return x.trim();});out+='<div class="pin-card">'+(pf?(pf.isVideo?'<video src="'+esc(blob(pf.assetId))+'" controls playsinline loop preload="metadata"></video>':'<img src="'+esc(blob(pf.assetId))+'" alt="Pin image">'):'<div class="media" style="aspect-ratio:2/3">No image yet</div>')+'<div class="pc-b"><b>'+esc(a.title||"")+'</b><p>'+esc(platformCut((pt.slice(0).join(" ")),100,2).text)+(full.length>100?"...":"")+'</p><div class="row" style="gap:8px">'+av.replace('class="av"','class="av" style="width:28px;height:28px"')+'<span class="small">'+esc(c.name)+'</span></div></div></div>';}
+  else if(p==="TikTok"){var f0=files[0];out+='<div class="story reel">'+(f0?(f0.isVideo?'<video class="media" style="padding:0;object-fit:cover" src="'+esc(blob(f0.assetId))+'" controls playsinline loop preload="metadata"></video>':'<img class="media" style="padding:0;object-fit:cover" src="'+esc(blob(f0.assetId))+'" alt="">'):'<div class="media">No 9:16 video yet</div>')+'<div class="rside" aria-hidden="true">'+ICON_HEART+ICON_CHAT+ICON_SEND+'</div><div class="rb"><b>@'+handle+'</b><div>'+more(platformCut(full.replace(/\n+/g," "),80,2),"more")+'</div></div></div>';}
   else out+='<div class="fb"><div class="hd">'+av+'<div><div class="nm">'+esc(c.name)+'</div><div class="sp">'+esc(when)+'</div></div></div><div class="bd">'+more(platformCut(full,p==="LinkedIn"?210:125,3),p==="LinkedIn"?"see more":"See more")+'</div>'+media(true)+fcHtml(a,esc(c.name),false)+'</div>';
   out+='<p class="small muted" style="width:380px;max-width:100%">'+(p==="Pinterest"?"Pins show the post name as the title and a short description.":"Caption is cut where "+esc(p)+" cuts it.")+' '+(p==="Pinterest"?"":" The full caption is on the right.")+'</p>';
   return out;
@@ -709,7 +729,7 @@ function kindEditor(a,c){
   var overall=a.status!=="draft"?'<div class="card"><span class="eyebrow">Overall client feedback</span>'+((a.overall||[]).length?a.overall.map(function(cm,ci){return commentHtml(cm,"o",0,ci,true);}).join(""):'<p class="small muted">No overall comments.</p>')+(S.composer==="o0"?composer("o0","o",0,"Reply to the client","Send reply"):'<button type="button" class="btn sm" style="align-self:flex-start" data-act="compose" data-v="o0">Reply to the client</button>')+'</div>':'';
   var uploader=function(label,help,accept){return editable?(assets?'<div class="drop"><div><h3>'+label+'</h3><p class="small muted">'+help+'</p></div><span class="btn accent filebtn">Choose files<input type="file" accept="'+accept+'" multiple data-upload="kfile" aria-label="'+esc(label)+'"></span></div>':'<p class="notice">You need edit access to this page to upload files.</p>'):'';};
   var fileRows=function(word,withLabel){return (a.creatives||[]).map(function(f,i){
-      var thumb=f.assetId?(f.isVideo?'<video class="thumb" src="'+esc(blob(f.assetId))+'" muted controls></video>':(/pdf/i.test(f.type||f.fileName||"")?'<div class="thumb">PDF</div>':'<img class="thumb" style="object-fit:cover" src="'+esc(blob(f.assetId))+'" alt="">')):'<div class="thumb">No file</div>';
+      var thumb=f.assetId?(f.isVideo?'<video class="thumb" src="'+esc(blob(f.assetId))+'" controls preload="metadata"></video>':(/pdf/i.test(f.type||f.fileName||"")?'<div class="thumb">PDF</div>':'<img class="thumb" style="object-fit:cover" src="'+esc(blob(f.assetId))+'" alt="">')):'<div class="thumb">No file</div>';
       return '<div class="panel'+(lineHasIssue(f)?" warn":"")+'"><div class="row" style="align-items:flex-start;gap:14px">'+thumb+'<div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px"><b class="small" style="word-break:break-all">'+esc(f.fileName||"")+'</b>'+(withLabel?'<label class="f" for="fl-'+i+'">'+word+' label<input class="in" id="fl-'+i+'" data-clabel="'+i+'" value="'+esc(f.label||"")+'" placeholder="e.g. Desktop, Mobile, Hero section"'+(editable?"":" disabled")+'></label>':'')+(editable?'<button type="button" class="btn sm" style="align-self:flex-start" data-act="removeCreative" data-i="'+i+'">Remove</button>':'')+'</div></div>'+(f.comments||[]).map(function(cm,ci){return commentHtml(cm,"c",i,ci,true);}).join("")+'</div>';}).join("");};
   if(k==="search"){
     h+='<div class="card"><span class="eyebrow">Ad setup</span><div class="grid2">'+inp("title","Ad name","Internal name for this ad.")+ownerSel+'</div>'+inp("url","Final URL","Where the ad sends people.")+'<div class="grid2">'+inp("path1","Display path 1","Up to 15 characters.",null,15)+inp("path2","Display path 2","Up to 15 characters.",null,15)+'</div></div>'+overall;
@@ -924,8 +944,8 @@ function editor(a,c){
     h+=sec("Description","One line under the headline. Keep to about 30 characters.",teamField(a,"dsc",0,a.description,"Description",30,editable,false));
     h+=sec("Button and landing page","Choose the Meta call to action button and where it goes.",teamField(a,"cta",0,a.ctaLine,"Call to action",null,editable,false));
   }else{
-    if(editable)h+=assets?'<div class="drop"><div><h3>'+(a.type==="CAROUSEL"?"Upload carousel cards":"Upload creative")+'</h3><p class="small muted">'+(a.type==="CAROUSEL"?"Select up to 10 files at once, in card order. 1:1 works best for carousel cards. Each file becomes a card.":"JPG, PNG or MP4 up to 20 MB each. Select several at once, for example a 4:5 for feed and a 9:16 for Stories and Reels.")+'</p></div><span class="btn accent filebtn">'+(a.type==="CAROUSEL"?"Choose card files":"Choose files")+'<input type="file" accept="image/*,video/*" multiple id="creative-up" data-upload="creative" aria-label="Upload creative"></span></div>':'<p class="notice">You need edit access to this page to upload creative.</p>';
-    h+=sec("Creative files",editable?"Set the ratio so each file shows in the right placement.":"Pull the ad back to change creative.",a.creatives.map(function(l,i){return teamField(a,"c",i,l,a.creatives.length>1?"Card "+(i+1):"Creative",null,editable,true);}).join(""));
+    if(editable)h+=assets?'<div class="drop"><div><h3>'+(a.type==="CAROUSEL"?"Upload carousel cards":"Upload creative")+'</h3><p class="small muted">'+(a.type==="CAROUSEL"?"Select several files at once, in card order. Square (1:1) files are the feed cards. Tall (9:16) files are picked up as the Stories and Reels versions. Up to 10 of each.":"JPG, PNG or MP4 up to 50 MB each. Select several at once, for example a 4:5 for feed and a 9:16 for Stories and Reels.")+'</p></div><span class="btn accent filebtn">'+(a.type==="CAROUSEL"?"Choose card files":"Choose files")+'<input type="file" accept="image/*,video/*" multiple id="creative-up" data-upload="creative" aria-label="Upload creative"></span></div>':'<p class="notice">You need edit access to this page to upload creative.</p>';
+    h+=sec("Creative files",editable?"Set the ratio so each file shows in the right placement.":"Pull the ad back to change creative.",a.creatives.map(function(l,i){var lab=a.creatives.length>1?"Card "+(i+1):"Creative";if(a.type==="CAROUSEL"){var grp=a.creatives.filter(function(x){return isStoryCard(x)===isStoryCard(l);});lab=(isStoryCard(l)?"Stories and Reels card ":"Feed card ")+(grp.indexOf(l)+1);}return teamField(a,"c",i,l,lab,null,editable,true);}).join(""));
   }
   return h;
 }
@@ -937,7 +957,7 @@ function teamField(a,kind,i,l,label,limit,editable,area){
   if(kind==="cta"){
     body='<div class="grid2" style="grid-template-columns:200px minmax(0,1fr);gap:10px"><label class="f" for="ad-cta">Button<select class="in" id="ad-cta" data-adf="cta"'+(editable?"":" disabled")+'>'+CTAS.map(function(o){return '<option'+(a.cta===o?" selected":"")+'>'+o+'</option>';}).join("")+'</select></label><label class="f" for="ad-url">Landing page<input class="in" id="ad-url" data-adf="url" value="'+esc(a.url||"")+'"'+(editable?"":" disabled")+'></label></div>';
   }else if(kind==="c"){
-    body='<div class="row" style="align-items:flex-start;gap:14px">'+(l.assetId?(l.isVideo?'<video class="thumb" style="aspect-ratio:'+(AR[l.ratio]||"4/5")+';height:auto" src="'+esc(blob(l.assetId))+'" muted controls></video>':'<img class="thumb" style="aspect-ratio:'+(AR[l.ratio]||"4/5")+';height:auto" src="'+esc(blob(l.assetId))+'" alt="'+esc(label)+'">'):'<div class="thumb">No file yet</div>')+'<div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px"><b class="small" style="word-break:break-all">'+esc(l.fileName)+'</b>'+(l.w&&l.h&&Math.abs(l.w/l.h-(l.ratio==="9:16"?0.5625:1))>0.03?'<span class="warn-t">This file is '+l.w+' × '+l.h+', not '+esc(l.ratio)+'. Meta will crop it. Export it at '+(l.ratio==="9:16"?"1080 × 1920":"1080 × 1080")+'.</span>':(l.w?'<span class="tiny muted">'+l.w+' × '+l.h+'</span>':""))+'<label class="f" for="ratio-'+i+'">Placement ratio<select class="in" id="ratio-'+i+'" data-ratio="'+i+'"'+(editable?"":" disabled")+'>'+(RATIOS.some(function(r){return r[0]===l.ratio;})?"":'<option value="'+esc(l.ratio)+'" selected>'+esc(l.ratio)+' · not used, choose 1:1 or 9:16</option>')+RATIOS.map(function(r){return '<option value="'+r[0]+'"'+(l.ratio===r[0]?" selected":"")+'>'+r[1]+'</option>';}).join("")+'</select></label>'+(a.type==="CAROUSEL"?'<label class="f" for="card-'+i+'">Card headline<input class="in" id="card-'+i+'" data-card="'+i+'" value="'+esc(l.cardHeadline||"")+'"'+(editable?"":" disabled")+'><span class="h">Shows under this card. Leave blank to use the ad headline.</span></label>':"")+'<label class="f" for="f-'+key+'">Notes for the client<textarea class="in" rows="2" id="f-'+key+'" data-line="'+kind+':'+i+'"'+(editable?"":" disabled")+'>'+esc(l.text)+'</textarea></label>'+(editable?'<button type="button" class="btn sm" style="align-self:flex-start" data-act="removeCreative" data-i="'+i+'">Remove</button>':"")+'</div></div>';
+    body='<div class="row" style="align-items:flex-start;gap:14px">'+(l.assetId?(l.isVideo?'<video class="thumb" style="aspect-ratio:'+(AR[l.ratio]||"4/5")+';height:auto" src="'+esc(blob(l.assetId))+'" controls preload="metadata"></video>':'<img class="thumb" style="aspect-ratio:'+(AR[l.ratio]||"4/5")+';height:auto" src="'+esc(blob(l.assetId))+'" alt="'+esc(label)+'">'):'<div class="thumb">No file yet</div>')+'<div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px"><b class="small" style="word-break:break-all">'+esc(l.fileName)+'</b>'+(l.w&&l.h&&Math.abs(l.w/l.h-(l.ratio==="9:16"?0.5625:1))>0.03?'<span class="warn-t">This file is '+l.w+' × '+l.h+', not '+esc(l.ratio)+'. Meta will crop it. Export it at '+(l.ratio==="9:16"?"1080 × 1920":"1080 × 1080")+'.</span>':(l.w?'<span class="tiny muted">'+l.w+' × '+l.h+'</span>':""))+'<label class="f" for="ratio-'+i+'">Placement ratio<select class="in" id="ratio-'+i+'" data-ratio="'+i+'"'+(editable?"":" disabled")+'>'+(RATIOS.some(function(r){return r[0]===l.ratio;})?"":'<option value="'+esc(l.ratio)+'" selected>'+esc(l.ratio)+' · not used, choose 1:1 or 9:16</option>')+RATIOS.map(function(r){return '<option value="'+r[0]+'"'+(l.ratio===r[0]?" selected":"")+'>'+r[1]+'</option>';}).join("")+'</select></label>'+(a.type==="CAROUSEL"?'<label class="f" for="card-'+i+'">Card headline<input class="in" id="card-'+i+'" data-card="'+i+'" value="'+esc(l.cardHeadline||"")+'"'+(editable?"":" disabled")+'><span class="h">Shows under this card. Leave blank to use the ad headline.</span></label>':"")+'<label class="f" for="f-'+key+'">Notes for the client<textarea class="in" rows="2" id="f-'+key+'" data-line="'+kind+':'+i+'"'+(editable?"":" disabled")+'>'+esc(l.text)+'</textarea></label>'+(editable?'<button type="button" class="btn sm" style="align-self:flex-start" data-act="removeCreative" data-i="'+i+'">Remove</button>':"")+'</div></div>';
   }else if(editable){
     body=area?'<textarea class="in" rows="4" id="f-'+key+'" data-line="'+kind+':'+i+'" aria-label="'+esc(label)+'">'+esc(l.text)+'</textarea>':'<input class="in" id="f-'+key+'" data-line="'+kind+':'+i+'" value="'+esc(l.text)+'" aria-label="'+esc(label)+'">';
   }else body='<div class="txt">'+esc(l.text)+'</div>';
@@ -1013,6 +1033,7 @@ var ACT={
   pinFocus:function(d){S.pinFocus=+d.ci;render();var el=document.getElementById("pc-"+d.ci);if(el)el.scrollIntoView({block:"center",behavior:"smooth"});},
   cancelPin:function(){S.pin=null;S.pdraft="";render();},
   postPin:function(){var t=String(S.pdraft||"").trim();if(!t){toast("Write a comment first.");return;}var pin=S.pin;if(!pin)return;var cm=commentObj(t);cm.x=pin.x;cm.y=pin.y;S.pin=null;S.pdraft="";editAd(function(a){var f=a.creatives[pin.i];f.comments=(f.comments||[]).concat([cm]);if(cm.role==="client"&&f.state==="none")f.state="reword";});toast("Comment added");},
+  storyCard:function(d){S.sci=Math.max(0,(S.sci||0)+(+d.v));render();},
   cpage:function(d){S.cpage=d.v;S.composer=null;render();},
   addColour:function(){var hex=normHex(S.bd.chex);if(!hex){toast("Enter a hex code, e.g. 001D21.");return;}var nm=(S.bd.cname||"").trim();editBrand(function(b){b.colours.push({name:nm,hex:hex});});S.bd.cname="";S.bd.chex="";toast(hex+" added");},
   addFont:function(){var nm=(S.bd.fname||"").trim();if(!nm){toast("Choose a Google font first.");return;}var match=GFONTS.filter(function(g){return g.toLowerCase()===nm.toLowerCase();})[0];var use=(S.bd.fuse||"").trim();editBrand(function(b){b.fonts.push({name:match||nm,use:use,source:"google"});});S.bd.fname="";S.bd.fuse="";toast((match||nm)+" added");},
@@ -1098,7 +1119,7 @@ document.addEventListener("change",function(e){var t=e.target;
   if(t.dataset.line){var p=t.dataset.line.split(":");editAd(function(a){getLine(a,p[0],+p[1]).text=t.value;});return;}
   if(t.dataset.adf){var k=t.dataset.adf,v=t.value;editAd(function(a){a[k]=v;if(k==="contentType"&&v===GBP&&!a.gbpText){a.gbpText=L("");a.gbpType=a.gbpType||"Update";a.gbpCta=a.gbpCta||"Learn more";}});return;}
   if(t.dataset.card){var ci=+t.dataset.card,cv=t.value;editAd(function(a){a.creatives[ci].cardHeadline=cv;});return;}
-  if(t.dataset.ratio){var i=+t.dataset.ratio,v2=t.value;editAd(function(a){a.creatives[i].ratio=v2;});return;}
+  if(t.dataset.ratio){var i=+t.dataset.ratio,v2=t.value;editAd(function(a){a.creatives[i].ratio=v2;a.creatives[i].ratioPicked=true;});return;}
   if(t.dataset.bnotes){var nv=t.value;editBrand(function(b){b.notes=nv;});return;}
   if(t.dataset.cf){var c=clone(S.clients[S.clientId]);c[t.dataset.cf]=t.dataset.cf==="reminderDays"?Math.max(1,parseInt(t.value,10)||3):(t.dataset.cf==="ig"?t.value.replace(/^@/,""):t.value);saveClient(c);return;}
   if(t.dataset.upload){var files=Array.prototype.slice.call(t.files||[]);if(!files.length||!assets)return;var kind=t.dataset.upload;t.value="";
@@ -1111,11 +1132,11 @@ document.addEventListener("change",function(e){var t=e.target;
       files.reduce(function(chain,f){return chain.then(function(){toast("Uploading "+(++kn)+" of "+kt+": "+f.name+"…");return Promise.all([assets.upload(f),measure(f)]).then(function(res){var r=res[0],dm=res[1];var vid=(r.contentType||f.type||"").indexOf("video")===0;
         editAd(function(a){a.creatives=(a.creatives||[]).concat([{text:"",state:"none",comments:[],assetId:r.id,isVideo:vid,type:r.contentType||f.type||"",fileName:f.name,label:"",w:dm?dm.w:null,h:dm?dm.h:null}]);});},uploadErr);});},Promise.resolve()).then(function(){toast(kt>1?kt+" files uploaded":files[0].name+" uploaded");});return;}
     if(kind==="logo"){var f0=files[0];toast("Uploading "+f0.name+"…");assets.upload(f0).then(function(r){var c2=clone(S.clients[S.clientId]);c2.logoId=r.id;saveClient(c2);toast("Logo updated");},uploadErr);return;}
-    var ad0=curAd();if(ad0&&ad0.type==="CAROUSEL"){var have=ad0.creatives.filter(function(c){return c.assetId;}).length;if(have+files.length>10){toast("Carousels take up to 10 cards. Only the first "+Math.max(0,10-have)+" will be added.");files=files.slice(0,Math.max(0,10-have));}}
+    var ad0=curAd();if(ad0&&ad0.type==="CAROUSEL"&&files.length+ad0.creatives.filter(function(c){return c.assetId;}).length>20){toast("Carousels take up to 10 feed cards and 10 Stories cards.");files=files.slice(0,Math.max(0,20-ad0.creatives.filter(function(c){return c.assetId;}).length));if(!files.length)return;}
     var n=0,total=files.length;
     files.reduce(function(chain,f){return chain.then(function(){toast("Uploading "+(++n)+" of "+total+": "+f.name+"…");
       return Promise.all([assets.upload(f),measure(f)]).then(function(res){var r=res[0],dims=res[1];var vid=(r.contentType||f.type||"").indexOf("video")===0;
-        editAd(function(a){var item={assetId:r.id,isVideo:vid,fileName:f.name,ratio:a.type==="CAROUSEL"?"1:1":(dims?closestRatio(dims.w,dims.h):"1:1"),w:dims?dims.w:null,h:dims?dims.h:null};var slot=-1;for(var i=0;i<a.creatives.length;i++){if(!a.creatives[i].assetId){slot=i;break;}}
+        editAd(function(a){var item={assetId:r.id,isVideo:vid,fileName:f.name,ratio:dims?closestRatio(dims.w,dims.h):"1:1",w:dims?dims.w:null,h:dims?dims.h:null};var slot=-1;for(var i=0;i<a.creatives.length;i++){if(!a.creatives[i].assetId){slot=i;break;}}
           if(slot>=0){Object.assign(a.creatives[slot],item);a.creatives[slot].state="none";}else a.creatives.push(Object.assign({text:"",state:"none",comments:[],cardHeadline:""},item));});
       },uploadErr);});},Promise.resolve()).then(function(){toast(total>1?total+" files uploaded":files[0].name+" uploaded");});
   }
@@ -1123,7 +1144,7 @@ document.addEventListener("change",function(e){var t=e.target;
 
 /* ---------- boot ---------- */
 var perms=null,loadTries=0;
-function uploadErr(err){if(err&&err.code==="video_needs_edit"){toast("Videos need edit access to this page. Images work for everyone.");return;}console.warn("upload failed",err);toast(err&&err.code==="too_large"?"That file is over 20 MB. Export a smaller version and try again.":(err&&err.code==="unsupported_type"?"That file type isn't supported. Use JPG, PNG or MP4.":"Upload failed"+(err&&(err.code||err.message)?" ("+(err.code||err.message)+")":"")+". Try again, and tell Claude the code in brackets if it keeps happening."));}
+function uploadErr(err){if(err&&err.code==="video_needs_edit"){toast("Videos need edit access to this page. Images work for everyone.");return;}console.warn("upload failed",err);toast(err&&err.code==="too_large"?"That file is over 50 MB. Export a smaller version and try again.":(err&&err.code==="unsupported_type"?"That file type isn't supported. Use JPG, PNG or MP4.":"Upload failed"+(err&&(err.code||err.message)?" ("+(err.code||err.message)+")":"")+". Try again. If it keeps happening, send the code in brackets to the team."));}
 function closestRatio(w,h){var r=w/h,best="1:1",d=9;[["1:1",1],["9:16",0.5625]].forEach(function(x){var dd=Math.abs(Math.log(r/x[1]));if(dd<d){d=dd;best=x[0];}});return best;}
 function measure(f){return new Promise(function(res){var url;try{url=URL.createObjectURL(f);}catch(e){res(null);return;}
   var done=function(w,h){try{URL.revokeObjectURL(url);}catch(e){}res(w&&h?{w:w,h:h}:null);};
@@ -1137,15 +1158,17 @@ function showLoadError(e){var m=document.getElementById("main");if(!m)return;
     setTimeout(function(){var el=document.getElementById("probe");if(el&&!done)el.textContent="Single read: no answer after 8s";},8000);}
   if(perms)perms.state().then(function(st){var el=document.getElementById("perm-state");if(el)el.textContent="Page permissions: "+Object.keys(st).map(function(k){return k+" "+st[k];}).join(", ");}).catch(function(){});
 }
-var known={clients:{},ads:{}},unsubs=[],pollT=null,lastIx="";
+var known={clients:{},ads:{}},unsubs=[],pollT=null,lastIx="",forceIx=false;
 function applyIndex(ix){
   ix=ix||{};var key=JSON.stringify(ix);if(key===lastIx&&S.loadedA)return;lastIx=key;
   var jobs=[];
   ["clients","ads"].forEach(function(kind){var map=ix[kind]||{};Object.keys(map).forEach(function(id){var e=map[id]||{};
     if(e.deleted){if(S[kind][id]){delete S[kind][id];}known[kind][id]=e.u;return;}
-    if(known[kind][id]===e.u&&S[kind][id])return;known[kind][id]=e.u;
-    jobs.push(db.doc(kind+"/"+id).get().then(function(snap){if(snap.exists){var v=clone(snap.data());v.id=id;S[kind][id]=v;}}));});});
-  Promise.all(jobs).then(function(){S.loadedA=true;S.loadedC=true;
+    if(known[kind][id]===e.u&&S[kind][id])return;
+    if(!forceIx&&S[kind][id]&&S[kind][id].updatedAt&&e.u&&String(S[kind][id].updatedAt)>=String(e.u))return;
+    known[kind][id]=e.u;
+    jobs.push(db.doc(kind+"/"+id).get().then(function(snap){if(snap.exists){var v=clone(snap.data());v.id=id;var cur=S[kind][id];if(!forceIx&&cur&&cur.updatedAt&&v.updatedAt&&String(cur.updatedAt)>String(v.updatedAt))return;S[kind][id]=v;}}));});});
+  Promise.all(jobs).then(function(){forceIx=false;S.loadedA=true;S.loadedC=true;
     if(!S.clientId||!S.clients[S.clientId]){var f=clientList()[0];S.clientId=f?f.id:null;}if(GDA.client){S.asClient=GDA.client;S.clientId=GDA.client;}else if(!S.asClient||!S.clients[S.asClient])S.asClient=S.clientId;schedule();},function(err){showLoadError(err);});
 }
 function readIndex(){return db.doc("index/main").get().then(function(snap){applyIndex(snap.exists?snap.data():{});});}
@@ -1172,6 +1195,6 @@ function boot(){
   window.claude.use("user").then(function(u){user=u;if(u)u.me().then(function(m){S.me=m;schedule();});});
   setTimeout(function(){if(!db&&!S.noDb){S.noDb=true;render();}},11000);
 }
-GDA.reload=function(){lastIx="";known={clients:{},ads:{}};readIndex().catch(function(){});};GDA.toast=toast;
+GDA.reload=function(){lastIx="";known={clients:{},ads:{}};forceIx=true;readIndex().catch(function(){forceIx=false;});};GDA.toast=toast;
 render();boot();
 })();
