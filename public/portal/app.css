@@ -472,3 +472,18 @@ body.gda-client .seg,body.gda-client #as-client{display:none!important}
 .shl{font-weight:700;font-size:14px}
 .snav{display:flex;align-items:center;justify-content:space-between;gap:8px;width:380px;max-width:100%}
 .story{position:relative}
+
+/* comment pinned on the design, written in place */
+.pin-pop{position:absolute;z-index:5;width:260px;max-width:70vw;margin:14px 0 0 14px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 8px 24px rgba(0,29,33,.18);padding:10px;display:flex;flex-direction:column;gap:8px;cursor:default}
+.pin-pop.flip{transform:translateX(-100%);margin-left:-14px}
+.pin-pop.up{transform:translateY(-100%);margin-top:-14px}
+.pin-pop.flip.up{transform:translate(-100%,-100%)}
+/* threads */
+.thread{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding-left:12px;border-left:2px solid var(--line)}
+.cmt.reply{padding:8px 10px}
+.rbox{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.linkbtn{background:none;border:0;padding:4px 0 0;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;align-self:flex-start}
+.linkbtn:hover{color:var(--ink);text-decoration:underline}
+.pin-wrap{overflow:visible}
+.pin-wrap>.pin-img{display:block;border-radius:9px}
+.pin-wrap.mob>.pin-img{border-radius:16px}

@@ -130,7 +130,10 @@ function commentHtml(c,kind,i,ci,team){
   var cls="cmt"+(c.resolved?" done":(c.role==="team"?" team":""));
   var tag=c.resolved?"Resolved by "+esc(c.resolvedByName||"Gordon Digital"):(c.role==="team"?"Gordon Digital reply":"");
   var res=team&&!c.resolved&&c.role==="client"?'<button type="button" class="btn sm" data-act="resolve" data-k="'+kind+'" data-i="'+i+'" data-ci="'+ci+'">Mark resolved</button>':"";
-  return '<div class="'+cls+'"><div class="by">'+esc(personName(c))+' · '+(c.role==="client"?"Client":"Gordon Digital")+'<span>'+esc(shortDate(c.at))+'</span></div><p>'+esc(c.text)+'</p>'+((tag||res)?'<div class="row" style="justify-content:space-between"><span class="tiny muted">'+tag+'</span>'+res+'</div>':"")+'</div>';
+  var key="r|"+kind+"|"+i+"|"+ci,a=curAd(),canReply=kind!=null&&ci!=null&&!(S.mode==="client"&&a&&a.status!=="awaiting");
+  var reps=(c.replies||[]).map(function(r){return '<div class="cmt reply'+(r.role==="team"?" team":"")+'"><div class="by">'+esc(personName(r))+' · '+(r.role==="client"?"Client":"Gordon Digital")+'<span>'+esc(shortDate(r.at))+'</span></div><p>'+esc(r.text)+'</p></div>';}).join("");
+  var rbox=S.replyKey===key?'<div class="rbox"><textarea class="in" id="rdraft" rows="2" data-rdraft="1" placeholder="Write a reply">'+esc(S.rdraft||"")+'</textarea><div class="row" style="justify-content:flex-end;gap:6px"><button type="button" class="btn sm" data-act="cancelReply">Cancel</button><button type="button" class="btn sm dark" data-act="sendReply" data-k="'+kind+'" data-i="'+i+'" data-ci="'+ci+'">Reply</button></div></div>':(canReply?'<button type="button" class="linkbtn" data-act="replyOpen" data-v="'+esc(key)+'">Reply'+((c.replies||[]).length?" · "+c.replies.length:"")+'</button>':'');
+  return '<div class="'+cls+'"><div class="by">'+esc(personName(c))+' · '+(c.role==="client"?"Client":"Gordon Digital")+'<span>'+esc(shortDate(c.at))+'</span></div><p>'+esc(c.text)+'</p>'+((tag||res)?'<div class="row" style="justify-content:space-between"><span class="tiny muted">'+tag+'</span>'+res+'</div>':"")+(reps?'<div class="thread">'+reps+'</div>':'')+rbox+'</div>';
 }
 function composer(key,kind,i,label,btn){
   if(S.composer!==key)return "";
@@ -214,7 +217,7 @@ function previewHtml(a,c){
 
 /* ---------- client view ---------- */
 var ICON_CHECK='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-function newClientComments(a){var since=a.sentAt||"",n=0,chk=function(c){if(c&&c.role==="client"&&!c.resolved&&(c.at||"")>=since)n++;};(a.overall||[]).forEach(chk);(allLines(a)||[]).forEach(function(l){(l&&l.comments||[]).forEach(chk);});return n;}
+function newClientComments(a){var since=a.sentAt||"",n=0,chk=function(c){if(c&&c.role==="client"&&!c.resolved&&(c.at||"")>=since)n++;(c&&c.replies||[]).forEach(function(r){if(r&&r.role==="client"&&(r.at||"")>=since)n++;});};(a.overall||[]).forEach(chk);(allLines(a)||[]).forEach(function(l){(l&&l.comments||[]).forEach(chk);});return n;}
 function decisionBtns(a){var n=newClientComments(a);
   return '<div class="ac-btns"><button type="button" class="ac-ok" data-act="cardApprove" data-v="'+a.id+'">'+ICON_CHECK+'Approve</button>'+(n?'<button type="button" class="ac-sub" data-act="submitChanges" data-v="'+a.id+'">Submit changes · '+n+'</button>':'<button type="button" class="ac-rw" data-act="cardChanges" data-v="'+a.id+'">Request changes</button>')+'</div>'+(n?'<span class="tiny muted">'+n+' comment'+(n>1?"s":"")+' ready to send. Submit when you\'ve finished.</span>':'');}
 function adCard(x,cur){
@@ -456,7 +459,7 @@ function designViewer(a,interactive){
   else if(isPdf)body='<div class="card" style="align-items:flex-start"><b>'+esc(f.fileName)+'</b><span class="small muted">PDF designs open outside the portal. Upload PNG or JPG versions to comment on the design directly.</span><button type="button" class="btn" data-act="dlAsset" data-id="'+esc(f.assetId)+'" data-name="'+esc(f.fileName)+'">Download PDF</button></div>';
   else{
     var n=0;var pins=(f.comments||[]).map(function(cm,ci){if(cm.x==null)return "";n++;return '<button type="button" class="pin'+(cm.resolved?" done":"")+(cm.role==="team"?" team":"")+'" style="left:'+cm.x+'%;top:'+cm.y+'%" data-act="pinFocus" data-ci="'+ci+'" title="'+esc(cm.text)+'" aria-label="Comment '+n+'">'+n+'</button>';}).join("");
-    var draft=S.pin&&S.pin.i===i?'<span class="pin new" style="left:'+S.pin.x+'%;top:'+S.pin.y+'%">+</span>':'';
+    var draft=S.pin&&S.pin.i===i?'<span class="pin new" style="left:'+S.pin.x+'%;top:'+S.pin.y+'%">+</span><div class="pin-pop'+(S.pin.x>55?" flip":"")+(S.pin.y>70?" up":"")+'" style="left:'+S.pin.x+'%;top:'+S.pin.y+'%"><textarea class="in" id="pin-draft" rows="3" data-pdraft="1" placeholder="What would you like changed here?">'+esc(S.pdraft||"")+'</textarea><div class="row" style="justify-content:flex-end;gap:6px"><button type="button" class="btn sm" data-act="cancelPin">Cancel</button><button type="button" class="btn sm dark" data-act="postPin">Post</button></div></div>':'';
     var mob=/mobile|phone/i.test(f.label||"")||(f.w&&f.w<=900);body='<div class="pin-outer"><div class="pin-wrap'+(interactive?" live":"")+(mob?" mob":"")+'" data-file="'+i+'"'+(f.w?' style="max-width:'+(mob?Math.min(f.w,414):f.w)+'px"':'')+'><img class="pin-img" src="'+esc(blob(f.assetId))+'" alt="'+esc(f.label||"Design")+'">'+pins+draft+'</div></div>';
   }
   var tip=interactive?'<p class="small muted">Click anywhere on the design to leave a comment on that spot.</p>':'';
@@ -506,7 +509,7 @@ function kindLines(a,locked){
 function pinPanel(a,locked){
   var files=a.creatives||[],i=Math.min(S.fileIdx||0,Math.max(0,files.length-1)),f=files[i];
   var h='<div class="card"><span class="eyebrow">Comments on the design</span>';
-  if(S.pin&&S.pin.i===i&&!locked)h+='<div class="c-in"><span class="pin sm">+</span><textarea class="in" id="pin-draft" rows="3" data-pdraft="1" placeholder="What would you like changed here?">'+esc(S.pdraft||"")+'</textarea></div><div class="c-bar"><button type="button" class="btn sm" data-act="cancelPin">Cancel</button><button type="button" class="btn sm dark" data-act="postPin">Post</button></div>';
+  if(S.pin&&S.pin.i===i&&!locked)h+='<p class="small muted">Write your comment in the box on the design.</p>';
   var n=0,list=f?(f.comments||[]).map(function(cm,ci){var num=cm.x!=null?++n:null;return '<div class="pinrow'+(S.pinFocus===ci?" on":"")+'" id="pc-'+ci+'">'+(num?'<span class="pin sm'+(cm.resolved?" done":"")+'">'+num+'</span>':'')+'<div style="flex:1;min-width:0">'+commentHtml(cm,"c",i,ci,S.mode==="team")+'</div></div>';}).join(""):"";
   h+=list||(S.pin?'':'<p class="small muted">'+(locked?"No comments.":"No comments yet. Click the design to add one.")+'</p>');
   return h+'</div>';
@@ -1033,6 +1036,10 @@ var ACT={
   pinFocus:function(d){S.pinFocus=+d.ci;render();var el=document.getElementById("pc-"+d.ci);if(el)el.scrollIntoView({block:"center",behavior:"smooth"});},
   cancelPin:function(){S.pin=null;S.pdraft="";render();},
   postPin:function(){var t=String(S.pdraft||"").trim();if(!t){toast("Write a comment first.");return;}var pin=S.pin;if(!pin)return;var cm=commentObj(t);cm.x=pin.x;cm.y=pin.y;S.pin=null;S.pdraft="";editAd(function(a){var f=a.creatives[pin.i];f.comments=(f.comments||[]).concat([cm]);if(cm.role==="client"&&f.state==="none")f.state="reword";});toast("Comment added");},
+  replyOpen:function(d){S.replyKey=d.v;S.rdraft="";render();var t=document.getElementById("rdraft");if(t)t.focus();},
+  cancelReply:function(){S.replyKey=null;S.rdraft="";render();},
+  sendReply:function(d){var t=String(S.rdraft||"").trim();if(!t){toast("Write a reply first.");return;}var cm=commentObj(t);S.replyKey=null;S.rdraft="";
+    editAd(function(a){var list=d.k==="o"?a.overall:(d.k==="fi"?(a.featured||{}).comments:getLine(a,d.k,+d.i).comments);var c=list&&list[+d.ci];if(!c)return;c.replies=(c.replies||[]).concat([cm]);});toast("Reply added");},
   storyCard:function(d){S.sci=Math.max(0,(S.sci||0)+(+d.v));render();},
   cpage:function(d){S.cpage=d.v;S.composer=null;render();},
   addColour:function(){var hex=normHex(S.bd.chex);if(!hex){toast("Enter a hex code, e.g. 001D21.");return;}var nm=(S.bd.cname||"").trim();editBrand(function(b){b.colours.push({name:nm,hex:hex});});S.bd.cname="";S.bd.chex="";toast(hex+" added");},
@@ -1087,13 +1094,14 @@ var ACT={
     var c={id:id,name:nc.name.trim(),strategist:nc.strategist,website:nc.website.trim(),ig:nc.ig.trim().replace(/^@/,""),logoId:null,defaultCta:"Learn more",landing:nc.website?("https://"+nc.website.replace(/^https?:\/\//,"")):"",metaAccount:"",googleId:"",approverName:nc.approverName.trim(),approverEmail:nc.approverEmail.trim(),platforms:{meta:!!nc.meta,search:!!nc.search,landing:!!nc.landing,webpage:!!nc.webpage,seo:!!nc.seo,social:!!nc.social},months:nc.meta?[mk]:[],reminderDays:3,createdAt:now()};
     S.strat=nc.strategist;S.page="clients";S.flash=c.name+" added with "+monthLabel(mk)+" ready to build. Open approvals to add the first ads.";S.nc=null;saveClient(c);}
 };
-document.addEventListener("click",function(e){if(e.target.closest("label.bsel"))return;var pw=e.target.closest(".pin-wrap.live");if(pw&&!e.target.closest(".pin")){var im=pw.querySelector("img");var r=im.getBoundingClientRect();var x=Math.round((e.clientX-r.left)/r.width*1000)/10,y=Math.round((e.clientY-r.top)/r.height*1000)/10;if(x<0||y<0||x>100||y>100)return;S.pin={i:+pw.dataset.file,x:x,y:y};S.pdraft="";S.pinFocus=null;render();var pt=document.getElementById("pin-draft");if(pt)pt.focus();return;}var b=e.target.closest("[data-act]");if(!b)return;var fn=ACT[b.dataset.act];if(fn){e.preventDefault();fn(b.dataset,b);}});
+document.addEventListener("click",function(e){if(e.target.closest("label.bsel"))return;var pw=e.target.closest(".pin-wrap.live");if(pw&&!e.target.closest(".pin")&&!e.target.closest(".pin-pop")){var im=pw.querySelector("img");var r=im.getBoundingClientRect();var x=Math.round((e.clientX-r.left)/r.width*1000)/10,y=Math.round((e.clientY-r.top)/r.height*1000)/10;if(x<0||y<0||x>100||y>100)return;S.pin={i:+pw.dataset.file,x:x,y:y};S.pdraft="";S.pinFocus=null;render();var pt=document.getElementById("pin-draft");if(pt){try{pt.focus({preventScroll:true});}catch(er){pt.focus();}}return;}var b=e.target.closest("[data-act]");if(!b)return;var fn=ACT[b.dataset.act];if(fn){e.preventDefault();fn(b.dataset,b);}});
 
 document.addEventListener("input",function(e){var t=e.target;
   if(t.dataset.draft){S.draft=t.value;return;}
   if(t.dataset.spd){if(S.spDraft)S.spDraft[t.dataset.spd]=t.value;return;}
   if(t.dataset.nf){if(S.newFolder)S.newFolder.name=t.value;return;}
   if(t.dataset.pdraft){S.pdraft=t.value;return;}
+  if(t.dataset.rdraft){S.rdraft=t.value;return;}
   if(t.dataset.odraft){S.odraft=t.value;var pb=document.getElementById("c-post");if(pb&&pb.dataset.v!=="changes")pb.disabled=!t.value.trim();else if(pb&&t.value.trim())pb.disabled=false;t.style.height="auto";t.style.height=Math.min(t.scrollHeight,200)+"px";return;}
   if(t.dataset.bd){S.bd[t.dataset.bd]=t.value;if(t.dataset.bd==="chex"){var sw=document.getElementById("hex-sw");if(sw)sw.style.background=normHex(t.value)||"transparent";}return;}
   if(t.dataset.newstrat){S.newStrat=t.value;return;}

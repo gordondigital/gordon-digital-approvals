@@ -12,7 +12,7 @@ export type MergeResult = { data: Json; added: number; transition: null | "chang
 
 const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o));
 const isObj = (v: unknown): v is Json => !!v && typeof v === "object" && !Array.isArray(v);
-const isCommentList = (key: string, v: unknown) => (key === "comments" || key === "overall") && Array.isArray(v);
+const isCommentList = (key: string, v: unknown) => (key === "comments" || key === "overall" || key === "replies") && Array.isArray(v);
 const clip = (s: unknown, n: number) => String(s ?? "").slice(0, n);
 
 /** Walk both trees together and append any new client comments found in `incoming` onto `base`. */
@@ -31,13 +31,23 @@ function mergeComments(base: unknown, incoming: unknown, actor: Actor, at: strin
       const cur = Array.isArray(base[key]) ? (base[key] as Json[]) : [];
       const ids = new Set(cur.map((c) => (isObj(c) ? String(c.id) : "")));
       const fresh = (inc as unknown[]).filter((c): c is Json => isObj(c) && !!c.id && !ids.has(String(c.id)) && String(c.text || "").trim() !== "");
+      // Replies on comments that already exist
+      for (const c of inc as unknown[]) {
+        if (!isObj(c) || !c.id) continue;
+        const match = cur.find((x) => isObj(x) && String(x.id) === String(c.id));
+        if (match && isObj(match) && Array.isArray(c.replies)) {
+          if (!Array.isArray(match.replies)) match.replies = [];
+          added += mergeComments(match, { replies: c.replies }, actor, at, depth + 1);
+        }
+      }
       if (fresh.length) {
         base[key] = cur.concat(
           fresh.slice(0, 50).map((c) => {
             const out: Json = { id: clip(c.id, 40), by: actor.email, name: actor.name, role: "client", text: clip(c.text, 5000), at, resolved: false, resolvedByName: null };
+            // Pins on a design are stored as percentages across and down the image.
             if (typeof c.x === "number" && typeof c.y === "number") {
-              out.x = Math.max(0, Math.min(1, c.x));
-              out.y = Math.max(0, Math.min(1, c.y));
+              out.x = Math.max(0, Math.min(100, c.x));
+              out.y = Math.max(0, Math.min(100, c.y));
             }
             return out;
           }),
