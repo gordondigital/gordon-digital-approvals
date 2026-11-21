@@ -17,7 +17,7 @@ Stack: Next.js on Vercel, Supabase (Postgres, Auth, Storage, Realtime), Resend f
   - accepts only new comments, "request changes" and "approve" (approvers on a confirmed device), and ignores anything else in what the browser sends
 - **Files** are in a private Storage bucket. `/api/media/...` checks who's asking and then hands out a short-lived link.
 - **Emails** (Resend) go out when:
-  - the team sends work (one email per send, however many items)
+  - the team sends work (one email per send, however many items). This and reminders come from the strategist's own Gmail when set up.
   - a client approves or asks for changes (to the strategist)
   - someone presses Remind
   - something has waited longer than the client's reminder setting in working days (checked every weekday at 8:45am Brisbane time)
@@ -45,6 +45,20 @@ Stack: Next.js on Vercel, Supabase (Postgres, Auth, Storage, Realtime), Resend f
 
 Sending from a subdomain keeps approval emails separate from your main mail's reputation.
 
+### 2b. Send client emails from the strategist's Gmail
+
+"Ready for your approval" and reminder emails go out from the client's strategist. They come from the strategist's own @gordondigital.com.au address, show in their Sent folder, and client replies land in their inbox. Approval codes and the team alerts still go through Resend.
+
+1. **Google Cloud** (project: client approvals portal):
+   1. Create a service account (`approvals-mailer`) with no roles.
+   2. Enable the **Gmail API**.
+   3. Create a JSON key.
+2. **Workspace Admin**: go to **Security → API controls → Domain Wide Delegation** and add the service account's Unique ID with the scope `https://www.googleapis.com/auth/gmail.send`. That scope can send only. It can't read mail.
+3. **Vercel**: paste the JSON key's contents into `GOOGLE_SERVICE_ACCOUNT_JSON`.
+4. **In the portal**: each strategist needs their email filled in under **Team → Edit**. That's the address their client emails come from.
+
+If a strategist has no email saved, or Gmail refuses a send, that email goes through Resend instead. It shows "Name at Gordon Digital" as the sender, with replies going to the strategist. Nothing gets lost.
+
 ### 3. Vercel
 
 1. Import this GitHub repo into Vercel. The framework is detected as Next.js.
@@ -63,6 +77,7 @@ Sending from a subdomain keeps approval emails separate from your main mail's re
 | `EMAIL_FROM` | `Gordon Digital Approvals <approvals@notify.gordondigital.com.au>` |
 | `EMAIL_REPLY_TO` | where client replies go. This address is also copied on approvals and changes. |
 | `CRON_SECRET` | another long random string |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | the whole contents of the service account's .json key (secret). See step 2b. |
 
 3. Deploy.
 4. **Settings → Domains**: add `approvals.gordondigital.com.au`.

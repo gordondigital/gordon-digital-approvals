@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { workDays } from "@/lib/workdays";
 import { approverEmails, logEvent } from "@/lib/reviewer";
-import { reviewLinkFor } from "@/lib/data";
+import { reviewLinkFor, strategistOf } from "@/lib/data";
 import { emails } from "@/lib/email";
 
 /**
@@ -35,7 +35,7 @@ export async function GET(req: Request) {
     const to = approverEmails(c);
     if (!to.length) continue;
     const waiting = (items || []).filter((i) => i.client_id === clientId).length;
-    await emails.reminder(to, String(c.name || ""), waiting, await reviewLinkFor(clientId, "reminders"), String(c.approverName || "").split(" ")[0]);
+    await emails.reminder(to, String(c.name || ""), waiting, await reviewLinkFor(clientId, "reminders"), String(c.approverName || "").split(" ")[0], await strategistOf(c));
     await sb.from("reminders").upsert(list.map((x) => ({ item_id: x.id, sent_for: x.sentAt, sent_at: new Date().toISOString() })));
     await logEvent({ client_id: clientId, type: "auto_reminder", meta: { items: list.map((x) => x.id), to } });
     emailsSent++;

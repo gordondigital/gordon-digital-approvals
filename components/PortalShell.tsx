@@ -121,10 +121,15 @@ function teamBackend(me: { id: string; name: string }) {
       async get(): Promise<Snap> {
         if (col === "index") return snap(await index());
         if (!t) return snap(null);
-        const { data, error } = await sb.from(t).select("data").eq("id", id).maybeSingle();
+        const { data, error } = await sb.from(t).select(col === "ads" ? "data,client_id" : "data").eq("id", id).maybeSingle();
         if (error) throw error;
-        if (col === "ads" && data) status[id] = data.data?.status;
-        return snap(data ? data.data : null);
+        if (!data) return snap(null);
+        const row = data as any;
+        if (col === "ads") {
+          status[id] = row.data?.status;
+          return snap({ ...row.data, clientId: row.data?.clientId || row.client_id });
+        }
+        return snap(row.data);
       },
       async set(obj: any) {
         if (col === "index") return;

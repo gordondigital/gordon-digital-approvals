@@ -15,7 +15,8 @@ export async function getItem(id: string): Promise<(Json & { clientId: string })
 }
 
 export async function saveItem(id: string, clientId: string, data: Json) {
-  const d = { ...data };
+  // The portal finds items by data.clientId, so it must always be in the saved data.
+  const d: Json = { ...data, clientId };
   delete d.id;
   const { error } = await supabaseAdmin().from("items").upsert({ id, client_id: clientId, data: d });
   if (error) throw error;
@@ -44,6 +45,15 @@ export async function reviewLinkFor(clientId: string, createdBy?: string): Promi
     if (error) throw error;
   }
   return `${appUrl()}/r/${token}`;
+}
+
+/** The strategist on this client, with their details from the Team page. Client emails go out from them. */
+export async function strategistOf(client: Json): Promise<{ name: string; email: string; title?: string; phone?: string } | null> {
+  const s = String(client.strategist || "");
+  if (!s) return null;
+  const team = await getTeamSettings();
+  const p = (((team?.people as Json) || {}) as Record<string, { email?: string; title?: string; phone?: string }>)[s] || {};
+  return { name: s, email: String(p.email || "").trim().toLowerCase(), title: p.title, phone: p.phone };
 }
 
 /** Emails for the people at Gordon Digital who look after this client. */

@@ -121,6 +121,14 @@ create policy team_read_events on public.events for select to authenticated usin
 drop policy if exists team_read_access on public.team_access;
 create policy team_read_access on public.team_access for select to authenticated using (public.is_team());
 
+-- API access. Works whether or not "Grant API access to new tables automatically" was ticked.
+-- Signed in users (the team, limited by the policies above) and the server get access. Anonymous visitors get none.
+grant usage on schema public to authenticated, service_role;
+grant select, insert, update, delete on all tables in schema public to authenticated, service_role;
+grant usage, select on all sequences in schema public to authenticated, service_role;
+revoke all on all tables in schema public from anon;
+grant execute on function public.is_team() to authenticated, service_role;
+
 -- Live updates for the team portal
 do $$ begin
   begin execute 'alter publication supabase_realtime add table public.clients'; exception when others then null; end;

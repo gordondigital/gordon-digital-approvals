@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTeamUser } from "@/lib/team";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { getClient, reviewLinkFor, describeItems } from "@/lib/data";
+import { getClient, reviewLinkFor, describeItems, strategistOf } from "@/lib/data";
 import { approverEmails, logEvent } from "@/lib/reviewer";
 import { emails } from "@/lib/email";
 
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   const link = await reviewLinkFor(clientId, me.email);
   const d = describeItems(client, items);
   const first = String(client.approverName || "").split(" ")[0];
-  await emails.batchReady(to, String(client.name || ""), d.what, d.where, link, first);
+  await emails.batchReady(to, String(client.name || ""), d.what, d.where, link, first, await strategistOf(client));
   await logEvent({ client_id: clientId, type: "sent", actor_name: me.name, actor_email: me.email, meta: { items: ids, to } });
   return NextResponse.json({ ok: true, sent: items.length, to });
 }
