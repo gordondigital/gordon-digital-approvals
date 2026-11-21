@@ -1,0 +1,9 @@
+node_modules
+.next
+.env
+.env.local
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+# Client data exported from the prototype. Never commit it.
+seed/
