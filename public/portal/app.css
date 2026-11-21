@@ -487,3 +487,7 @@ body.gda-client .seg,body.gda-client #as-client{display:none!important}
 .pin-wrap{overflow:visible}
 .pin-wrap>.pin-img{display:block;border-radius:9px}
 .pin-wrap.mob>.pin-img{border-radius:16px}
+
+.pin.on{outline:3px solid var(--accent);outline-offset:2px;z-index:4}
+.pin-pop.view{gap:6px;padding:10px 12px}
+button.pin.sm{cursor:pointer;font-family:inherit}
