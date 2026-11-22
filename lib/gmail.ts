@@ -81,3 +81,18 @@ export async function gmailSend(from: { name: string; email: string }, to: strin
   });
   if (!r.ok) throw new Error(`Gmail send failed for ${from.email}: ${r.status} ${(await r.text()).slice(0, 300)}`);
 }
+
+/** For the email check page: is Gmail set up, and can we get a sending token for this person? */
+export async function gmailCheck(asUser: string): Promise<{ configured: boolean; serviceAccount?: string; tokenOk?: boolean; error?: string }> {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return { configured: false, error: "GOOGLE_SERVICE_ACCOUNT_JSON isn't set in Vercel for this deployment." };
+  const k = serviceKey();
+  if (!k) return { configured: false, error: "GOOGLE_SERVICE_ACCOUNT_JSON is set but isn't the full JSON key file (needs client_email and private_key)." };
+  try {
+    tokens.delete(asUser);
+    await accessToken(asUser);
+    return { configured: true, serviceAccount: k.client_email, tokenOk: true };
+  } catch (e) {
+    return { configured: true, serviceAccount: k.client_email, tokenOk: false, error: (e as Error).message };
+  }
+}
