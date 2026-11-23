@@ -113,19 +113,12 @@ function personal(paras: string[], from?: Sender) {
 const reviewLink = (url: string, text: string) => `<a href="${esc(url)}" style="${A}color:#1a5ccf;text-decoration:underline;font-weight:bold;">${esc(text)}</a>`;
 
 export const emails = {
-  batchReady: (to: string[], clientName: string, what: string, where: string, link: string, firstName?: string, from?: Sender) =>
+  /** fresh: first versions. updated: version 2 onwards, i.e. changes the client asked for. */
+  batchReady: (to: string[], clientName: string, fresh: string, updated: string, where: string, link: string, firstName?: string, from?: Sender) =>
     send(
       to,
-      `${clientName}: ${what} ready for your approval`,
-      personal(
-        [
-          `Hi ${esc(firstName || "there")},`,
-          `I've sent through ${esc(what)} for ${esc(clientName)}${where ? ` (${esc(where)})` : ""} for your review.`,
-          `You can see everything here: ${reviewLink(link, "Review and approve")}`,
-          `Leave a comment on anything you'd like changed, or approve when you're happy. Nothing goes live until you approve it.`,
-        ],
-        from,
-      ),
+      readySubject(clientName, fresh, updated),
+      personal(readyParas(clientName, fresh, updated, where, link, firstName), from),
       from,
     ),
   approvalCode: (to: string, code: string, clientName: string) =>
@@ -164,8 +157,33 @@ export const emails = {
     ),
 };
 
+function readySubject(client: string, fresh: string, updated: string) {
+  if (fresh && updated) return `${client}: new and updated work ready for your approval`;
+  if (updated) return `${client}: your changes are ready to review`;
+  return `${client}: ${fresh} ready for your approval`;
+}
+function readyParas(client: string, fresh: string, updated: string, where: string, link: string, firstName?: string) {
+  const w = where ? ` (${esc(where)})` : "";
+  const intro =
+    fresh && updated
+      ? `I've sent through ${esc(fresh)} for ${esc(client)}${w} for your review. I've also made the changes you asked for on ${esc(updated)}, so they're ready for another look.`
+      : updated
+        ? `I've made the changes you asked for on ${esc(updated)} for ${esc(client)}${w}. They're ready for you to take another look.`
+        : `I've sent through ${esc(fresh)} for ${esc(client)}${w} for your review.`;
+  return [
+    `Hi ${esc(firstName || "there")},`,
+    intro,
+    `You can see everything here: ${reviewLink(link, "Review and approve")}`,
+    updated && !fresh
+      ? `If it all looks good, approve when you're happy. If anything still needs a tweak, leave a comment and I'll sort it.`
+      : `Leave a comment on anything you'd like changed, or approve when you're happy. Nothing goes live until you approve it.`,
+  ];
+}
+
 /** Sample client emails for the preview page. */
-export function previewClientEmail(kind: "ready" | "reminder", from: Sender, link: string) {
+export function previewClientEmail(kind: "ready" | "updated" | "both" | "reminder", from: Sender, link: string) {
+  if (kind === "updated") return personal(readyParas("OJ Pippin Homes", "", "2 Meta ads", "December 2026", link, "Bridgette"), from);
+  if (kind === "both") return personal(readyParas("OJ Pippin Homes", "3 Meta ads", "2 Meta ads", "December 2026", link, "Bridgette"), from);
   return kind === "reminder"
     ? personal(
         [

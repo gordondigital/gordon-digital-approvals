@@ -20,9 +20,21 @@ export async function POST(req: Request) {
   const to = approverEmails(client);
   if (!to.length) return NextResponse.json({ ok: true, sent: 0, warning: "No approver email on this client. Add one in client settings." });
   const link = await reviewLinkFor(clientId, me.email);
+  // Version 1 is new work. Version 2 onwards is the client's changes, made.
+  const fresh = items.filter((x) => (Number(x.version) || 1) <= 1);
+  const updated = items.filter((x) => (Number(x.version) || 1) > 1);
   const d = describeItems(client, items);
   const first = String(client.approverName || "").split(" ")[0];
-  const sentFrom = await emails.batchReady(to, String(client.name || ""), d.what, d.where, link, first, await strategistOf(client));
+  const sentFrom = await emails.batchReady(
+    to,
+    String(client.name || ""),
+    fresh.length ? describeItems(client, fresh).what : "",
+    updated.length ? describeItems(client, updated).what : "",
+    d.where,
+    link,
+    first,
+    await strategistOf(client),
+  );
   await logEvent({ client_id: clientId, type: "sent", actor_name: me.name, actor_email: me.email, meta: { items: ids, to } });
   return NextResponse.json({ ok: true, sent: items.length, to, from: sentFrom });
 }
