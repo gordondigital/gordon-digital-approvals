@@ -84,6 +84,8 @@ export function mergeClientItem(current: Json, incoming: Json, actor: Actor, opt
     data.approvedAt = at;
     data.approvedBy = actor.email;
     data.approvedByName = actor.name;
+    // "Approve with changes": approved, and the team makes the client's comments without another round.
+    data.withChanges = incoming.withChanges === true;
     data.note = clip(incoming.note, 300) || `Version ${data.version}. Approved.`;
   }
   if (!added && !transition) return { data, added, transition };

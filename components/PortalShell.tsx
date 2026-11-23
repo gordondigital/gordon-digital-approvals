@@ -25,6 +25,28 @@ async function api(url: string, body?: unknown) {
   return j;
 }
 
+
+/** Upload straight to Storage with a signed URL, reporting progress (fetch can't). */
+function putSigned(key: string, token: string, file: File, onProgress?: (p: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const path = key.split("/").map(encodeURIComponent).join("/");
+    xhr.open("PUT", `${sbUrl}/storage/v1/object/upload/sign/media/${path}?token=${encodeURIComponent(token)}`);
+    xhr.setRequestHeader("apikey", sbAnon);
+    xhr.setRequestHeader("x-upsert", "false");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject({ code: "upload_failed", message: `Storage said ${xhr.status}: ${xhr.responseText.slice(0, 200)}` }));
+    xhr.onerror = () => reject({ code: "upload_failed", message: "The connection dropped during the upload." });
+    xhr.ontimeout = () => reject({ code: "timeout", message: "The upload took too long." });
+    const fd = new FormData();
+    fd.append("cacheControl", "3600");
+    fd.append("", file);
+    xhr.send(fd);
+  });
+}
+
 function downloadsApi() {
   return {
     save: async ({ filename, data }: { filename: string; data: Blob }) => {
@@ -174,14 +196,13 @@ function teamBackend(me: { id: string; name: string }) {
   };
 
   const assets = {
-    async upload(file: File, opts?: { team?: boolean }) {
+    async upload(file: File, opts?: { team?: boolean; onProgress?: (p: number) => void }) {
       const G = (window as any).GDA;
       const clientId = opts?.team ? null : G?.currentClient?.() || null;
       const { key, token } = await api("/api/team/upload", { clientId, type: file.type, size: file.size }).catch((e) => {
         throw { code: e.code || "upload_failed", message: e.message };
       });
-      const { error } = await sb.storage.from("media").uploadToSignedUrl(key, token, file, { contentType: file.type || "application/octet-stream" });
-      if (error) throw { code: "upload_failed", message: error.message };
+      await putSigned(key, token, file, opts?.onProgress);
       return { id: key, contentType: file.type };
     },
   };
@@ -204,7 +225,6 @@ function clientBackend(token: string, clientId: string) {
   let loading: Promise<any> | null = null;
   const versions: Record<string, string> = {};
   const listeners = new Set<() => void>();
-  const sb = createBrowserClient(sbUrl, sbAnon);
   const queues: Record<string, Promise<void>> = {};
 
   const load = () =>
@@ -284,12 +304,11 @@ function clientBackend(token: string, clientId: string) {
   };
 
   const assets = {
-    async upload(file: File) {
+    async upload(file: File, opts?: { onProgress?: (p: number) => void }) {
       const { key, token: t } = await api(base + "/upload", { type: file.type, size: file.size }).catch((e) => {
         throw { code: e.code || "upload_failed", message: e.message };
       });
-      const { error } = await sb.storage.from("media").uploadToSignedUrl(key, t, file, { contentType: file.type || "application/octet-stream" });
-      if (error) throw { code: "upload_failed", message: error.message };
+      await putSigned(key, t, file, opts?.onProgress);
       return { id: key, contentType: file.type };
     },
   };

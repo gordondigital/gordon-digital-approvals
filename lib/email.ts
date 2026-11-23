@@ -130,13 +130,17 @@ export const emails = {
         `<p>Enter this code to approve work for <b>${esc(clientName)}</b>. It works for 10 minutes.</p><p style="font-size:30px;letter-spacing:6px;font-weight:700;margin:16px 0">${esc(code)}</p><p style="color:#5f6f70;font-size:13px">You only need to do this once on each device. If you didn't ask for this, you can ignore this email.</p>`,
       ),
     ),
-  teamUpdate: (to: string[], clientName: string, title: string, what: "approved" | "changes", who: string, link: string) =>
+  teamUpdate: (to: string[], clientName: string, title: string, what: "approved" | "changes" | "approvedWithChanges", who: string, link: string) =>
     send(
       to,
-      what === "approved" ? `Approved: ${title} (${clientName})` : `Changes requested: ${title} (${clientName})`,
+      what === "approved" ? `Approved: ${title} (${clientName})` : what === "approvedWithChanges" ? `Approved with changes: ${title} (${clientName})` : `Changes requested: ${title} (${clientName})`,
       layout(
-        what === "approved" ? `${clientName} approved ${title}` : `${clientName} wants changes to ${title}`,
-        what === "approved" ? `<p>${esc(who)} approved it. It's ready to go live.</p>` : `<p>${esc(who)} sent changes. Their comments are on the item.</p>`,
+        what === "approved" ? `${clientName} approved ${title}` : what === "approvedWithChanges" ? `${clientName} approved ${title} with changes` : `${clientName} wants changes to ${title}`,
+        what === "approved"
+          ? `<p>${esc(who)} approved it. It's ready to go live.</p>`
+          : what === "approvedWithChanges"
+            ? `<p>${esc(who)} approved it with a few edits. Make the changes in their comments, resolve each one, then mark it live. No need to send it back.</p>`
+            : `<p>${esc(who)} sent changes. Their comments are on the item.</p>`,
         { label: "Open in the portal", url: link },
       ),
     ),

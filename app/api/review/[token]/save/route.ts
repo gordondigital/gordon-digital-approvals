@@ -45,7 +45,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   if (res.transition) {
     const to = await teamEmailsFor(ctx.client);
     const portal = `${appUrl()}/portal`;
-    await emails.teamUpdate(to, String(ctx.client.name || ""), String(item.title || "an item"), res.transition, me.name, portal).catch((e) => console.error(e));
+    const what = res.transition === "approved" && res.data.withChanges ? "approvedWithChanges" : res.transition;
+    await emails.teamUpdate(to, String(ctx.client.name || ""), String(item.title || "an item"), what, me.name, portal).catch((e) => console.error(e));
   }
   return json({ ok: true, data: forClient(res.data) });
 }
