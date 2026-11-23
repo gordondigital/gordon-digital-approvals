@@ -66,20 +66,65 @@ async function send(to: string[], subject: string, html: string, from?: Sender):
   return "approvals@notify";
 }
 
-const signoff = (from?: Sender) =>
-  from?.name
-    ? `<p style="margin-top:20px">Cheers,<br><b>${esc(from.name)}</b><br><span style="color:#5f6f70">${esc(from.title || "Gordon Digital")}${from.phone ? " · " + esc(from.phone) : ""}</span></p>`
-    : "";
+/* ---------- client emails: written like a normal email from the strategist, with their Gmail signature ---------- */
+
+const OFFICE_PHONE = "07 3124 0257";
+const OFFICE_ADDRESS = "Suite 301, 33 Longland Street, Newstead QLD 4006";
+const SITE = "https://gordondigital.com.au";
+const SIG_LOGO = "https://gordondigital.com.au/wp-content/uploads/GD-Primary-Inline-SC-Black-scaled.png";
+const REVIEW_LINK = "https://g.page/r/CWezHNvBHtiiEAI/review";
+
+const tel = (p: string) => {
+  const d = p.replace(/[^\d+]/g, "");
+  return d.startsWith("+") ? d : d.startsWith("0") ? "+61" + d.slice(1) : d;
+};
+const A = "font-family:Arial, Helvetica, sans-serif;";
+const sep = '<span style="color:#d7d7cb;">&nbsp;&nbsp;|&nbsp;&nbsp;</span>';
+const lbl = (t: string) => `<span style="${A}color:#4d5f61;font-weight:bold;font-size:11px;">${t}</span>`;
+const plainLink = (href: string, text: string) => `<a href="${esc(href)}" style="${A}color:#001d21;text-decoration:none;">${esc(text)}</a>`;
+
+/** The Gordon Digital Gmail signature, filled in from the strategist's Team page details. */
+function signature(from: NonNullable<Sender>) {
+  const contact = [
+    from.phone ? `${lbl("M")}&nbsp;${plainLink("tel:" + tel(from.phone), from.phone)}` : "",
+    `${lbl("P")}&nbsp;${plainLink("tel:" + tel(OFFICE_PHONE), OFFICE_PHONE)}`,
+  ]
+    .filter(Boolean)
+    .join(sep);
+  return `<table width="480" cellpadding="0" cellspacing="0" border="0" role="presentation" style="width:480px;max-width:100%;border-collapse:collapse;${A}color:#001d21;">
+<tr><td style="padding:0 0 16px 0;"><table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td valign="top">
+<div style="${A}font-size:22px;line-height:28px;font-weight:normal;color:#001d21;">${esc(from.name)}</div>
+<div style="${A}font-size:11px;line-height:16px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:#4d5f61;padding:4px 0 12px 0;">${esc(from.title || "Strategist")}${sep}Gordon Digital</div>
+<div style="${A}font-size:13px;line-height:20px;color:#001d21;">${contact}<br>${plainLink("mailto:" + from.email, from.email)}${sep}${plainLink(SITE, "gordondigital.com.au")}</div><div style="${A}font-size:12px;line-height:18px;color:#4d5f61;padding-top:8px;">${OFFICE_ADDRESS}</div>
+</td></tr></table></td></tr>
+<tr><td style="border-top:2px solid #001d21;padding:16px 0 0 0;"><a href="${SITE}" style="text-decoration:none;"><img src="${SIG_LOGO}" width="480" alt="Gordon Digital" style="display:block;width:480px;max-width:100%;height:auto;border:0;"></a></td></tr>
+<tr><td style="padding:14px 0 0 0;"><a href="${REVIEW_LINK}" style="${A}font-size:12px;font-weight:bold;color:#001d21;text-decoration:underline;">Love working with our team? Leave us a Google review &rarr;</a></td></tr>
+</table>`;
+}
+
+/** A plain, personal looking email: paragraphs of text, a link, a sign off and the signature. No card, no header. */
+function personal(paras: string[], from?: Sender) {
+  const p = (t: string) => `<p style="${A}font-size:14px;line-height:22px;color:#001d21;margin:0 0 14px 0;">${t}</p>`;
+  const first = from?.name ? from.name.split(" ")[0] : "The Gordon Digital team";
+  return `<!doctype html><html><body style="margin:0;padding:16px;background:#ffffff;">
+<div style="max-width:600px;">${paras.map(p).join("")}${from?.email ? p("Thanks,") + signature(from) : p(`Thanks,<br>${esc(first)}`)}</div>
+</body></html>`;
+}
+const reviewLink = (url: string, text: string) => `<a href="${esc(url)}" style="${A}color:#1a5ccf;text-decoration:underline;font-weight:bold;">${esc(text)}</a>`;
 
 export const emails = {
   batchReady: (to: string[], clientName: string, what: string, where: string, link: string, firstName?: string, from?: Sender) =>
     send(
       to,
-      `${what} ready for your approval`,
-      layout(
-        `${firstName ? "Hi " + firstName + ", " : ""}there's something to review`,
-        `<p>${from?.name ? "I've sent through" : "Gordon Digital has sent"} <b>${esc(what)}</b> for <b>${esc(clientName)}</b>${where ? ` (${esc(where)})` : ""}.</p><p>Leave comments on anything you'd like changed, or approve when you're happy. Nothing goes live until you approve it.</p>${signoff(from)}`,
-        { label: "Review now", url: link },
+      `${clientName}: ${what} ready for your approval`,
+      personal(
+        [
+          `Hi ${esc(firstName || "there")},`,
+          `I've sent through ${esc(what)} for ${esc(clientName)}${where ? ` (${esc(where)})` : ""} for your review.`,
+          `You can see everything here: ${reviewLink(link, "Review and approve")}`,
+          `Leave a comment on anything you'd like changed, or approve when you're happy. Nothing goes live until you approve it.`,
+        ],
+        from,
       ),
       from,
     ),
@@ -105,12 +150,39 @@ export const emails = {
   reminder: (to: string[], clientName: string, count: number, link: string, firstName?: string, from?: Sender) =>
     send(
       to,
-      `Reminder: ${count} item${count === 1 ? "" : "s"} waiting for your approval`,
-      layout(
-        `${firstName ? "Hi " + firstName + ", " : ""}a quick reminder`,
-        `<p>There ${count === 1 ? "is 1 item" : `are ${count} items`} for <b>${esc(clientName)}</b> waiting on your approval.</p><p>It only takes a minute. Approve, or leave a comment on anything you'd like changed.</p>${signoff(from)}`,
-        { label: "Review now", url: link },
+      `${clientName}: ${count === 1 ? "1 item" : count + " items"} waiting on your approval`,
+      personal(
+        [
+          `Hi ${esc(firstName || "there")},`,
+          `Just a quick reminder that ${count === 1 ? "there's 1 item" : `there are ${count} items`} for ${esc(clientName)} waiting on your approval.`,
+          `You can review ${count === 1 ? "it" : "them"} here: ${reviewLink(link, "Review and approve")}`,
+          `Let me know if you have any questions.`,
+        ],
+        from,
       ),
       from,
     ),
 };
+
+/** Sample client emails for the preview page. */
+export function previewClientEmail(kind: "ready" | "reminder", from: Sender, link: string) {
+  return kind === "reminder"
+    ? personal(
+        [
+          "Hi Bridgette,",
+          "Just a quick reminder that there are 3 items for OJ Pippin Homes waiting on your approval.",
+          `You can review them here: ${reviewLink(link, "Review and approve")}`,
+          "Let me know if you have any questions.",
+        ],
+        from,
+      )
+    : personal(
+        [
+          "Hi Bridgette,",
+          "I've sent through 4 Meta ads for OJ Pippin Homes (December 2026) for your review.",
+          `You can see everything here: ${reviewLink(link, "Review and approve")}`,
+          "Leave a comment on anything you'd like changed, or approve when you're happy. Nothing goes live until you approve it.",
+        ],
+        from,
+      );
+}
