@@ -508,3 +508,9 @@ button.pin.sm{cursor:pointer;font-family:inherit}
 .diff ins,.chgs ins{background:#dcf3e3;color:#13542e;text-decoration:none}
 /* team preview tab */
 .tpv-in{display:flex;flex-direction:column;align-items:center;gap:12px}
+/* decision buttons wrap instead of running out of the card */
+.ac-btns{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.ac-ok,.ac-rw,.ac-sub{white-space:normal;text-align:center;line-height:1.25}
+.pdiff{display:flex;flex-direction:column;gap:8px}
+.diff.para{padding:8px 10px;background:var(--surface-2);border-radius:8px}
+.tg-row{gap:16px;flex-wrap:wrap}

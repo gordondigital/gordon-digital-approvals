@@ -83,18 +83,31 @@ function fieldMap(a){var k=kindOf(a),f=[],add=function(key,label,v){v=plainOf(v&
 function snapshotCopy(n){var m={};fieldMap(n).forEach(function(x){m[x[0]]=[x[1],x[2]];});n.prevCopy=n.sentCopy||null;n.prevVersion=n.sentVersion||null;n.sentCopy=m;n.sentVersion=n.version;}
 /* What to compare against: while the team edits, the last version sent; once sent, the version before it. */
 function changeBase(a){if(a.status==="draft"||a.status==="changes"||(a.status==="approved"&&a.withChanges&&S.mode==="team"))return a.sentCopy?{copy:a.sentCopy,v:a.sentVersion}:null;return a.prevCopy?{copy:a.prevCopy,v:a.prevVersion}:null;}
-function wordDiff(a,b){var tok=function(x){return String(x).match(/\s*\S+\s*/g)||[];},A=tok(a),B=tok(b),n=A.length,m=B.length;
+function wordDiff(a,b){var tok=function(x){return String(x).match(/\s*\S+\s*/g)||[];},A=tok(a),B=tok(b),n=A.length,m=B.length,At=A.map(function(x){return x.trim();}),Bt=B.map(function(x){return x.trim();});
   if(n*m>4000000)return '<del>'+esc(a)+'</del> <ins>'+esc(b)+'</ins>';
-  var W=m+1,L=new Uint32Array((n+1)*W);for(var i=n-1;i>=0;i--)for(var j=m-1;j>=0;j--)L[i*W+j]=A[i]===B[j]?L[(i+1)*W+j+1]+1:Math.max(L[(i+1)*W+j],L[i*W+j+1]);
+  var W=m+1,L=new Uint32Array((n+1)*W);for(var i=n-1;i>=0;i--)for(var j=m-1;j>=0;j--)L[i*W+j]=At[i]===Bt[j]?L[(i+1)*W+j+1]+1:Math.max(L[(i+1)*W+j],L[i*W+j+1]);
   var out="",i2=0,j2=0,del="",ins="",flush=function(){if(del)out+='<del>'+esc(del)+'</del>'+(ins&&!/\s$/.test(del)?" ":"");if(ins)out+='<ins>'+esc(ins)+'</ins>';del="";ins="";};
-  while(i2<n&&j2<m){if(A[i2]===B[j2]){flush();out+=esc(A[i2]);i2++;j2++;}else if(L[(i2+1)*W+j2]>=L[i2*W+j2+1]){del+=A[i2++];}else{ins+=B[j2++];}}
+  while(i2<n&&j2<m){if(At[i2]===Bt[j2]){flush();out+=esc(B[j2]);i2++;j2++;}else if(L[(i2+1)*W+j2]>=L[i2*W+j2+1]){del+=A[i2++];}else{ins+=B[j2++];}}
   while(i2<n)del+=A[i2++];while(j2<m)ins+=B[j2++];flush();return out;}
+/* Long text (articles): only the paragraphs that changed, each with a word diff. */
+function paraDiff(a,b){var A=String(a).split(/\n{2,}/),B=String(b).split(/\n{2,}/),n=A.length,m=B.length,W=m+1,L=new Uint32Array((n+1)*W);
+  for(var i=n-1;i>=0;i--)for(var j=m-1;j>=0;j--)L[i*W+j]=A[i]===B[j]?L[(i+1)*W+j+1]+1:Math.max(L[(i+1)*W+j],L[i*W+j+1]);
+  var out=[],i2=0,j2=0,dl=[],il=[],skipped=0,flush=function(){if(!dl.length&&!il.length)return;if(skipped&&out.length)out.push('<div class="tiny muted">…</div>');skipped=0;var k=Math.max(dl.length,il.length);for(var q=0;q<k;q++)out.push('<div class="txt diff para">'+wordDiff(dl[q]||"",il[q]||"")+'</div>');dl=[];il=[];};
+  while(i2<n&&j2<m){if(A[i2]===B[j2]){flush();skipped++;i2++;j2++;}else if(L[(i2+1)*W+j2]>=L[i2*W+j2+1])dl.push(A[i2++]);else il.push(B[j2++]);}
+  while(i2<n)dl.push(A[i2++]);while(j2<m)il.push(B[j2++]);flush();
+  return '<div class="pdiff">'+out.join("")+'</div>';}
 function changesPanel(a){var base=changeBase(a);if(!base)return "";var now0={};fieldMap(a).forEach(function(x){now0[x[0]]=[x[1],x[2]];});
   var keys=Object.keys(base.copy).concat(Object.keys(now0).filter(function(k){return !base.copy[k];}));
-  var rows=keys.map(function(k){var was=(base.copy[k]||[])[1]||"",is=(now0[k]||[])[1]||"",label=(now0[k]||base.copy[k])[0];if(was===is)return "";return '<div class="chg"><div class="lbl"><span>'+esc(label)+'</span><span class="tiny muted">'+(!was?"Added":(!is?"Removed":"Changed"))+'</span></div><div class="txt diff">'+wordDiff(was,is)+'</div></div>';}).join("");
+  var rows=keys.map(function(k){var was=(base.copy[k]||[])[1]||"",is=(now0[k]||[])[1]||"",label=(now0[k]||base.copy[k])[0];if(was===is)return "";return '<div class="chg"><div class="lbl"><span>'+esc(label)+'</span><span class="tiny muted">'+(!was?"Added":(!is?"Removed":"Changed"))+'</span></div>'+(/\n\n/.test(was+is)?paraDiff(was,is):'<div class="txt diff">'+wordDiff(was,is)+'</div>')+'</div>';}).join("");
   var vs="version "+base.v+((S.mode==="team"&&(a.status==="draft"||a.status==="changes"||a.withChanges))?" (last sent)":"");
   return '<div class="card chgs"><span class="eyebrow">Changes since '+esc(vs)+'</span>'+(rows||'<p class="small muted">No copy changes since '+esc(vs)+'.</p>')+'<span class="tiny muted"><del>Struck through</del> was removed. <ins>Highlighted</ins> was added.</span></div>';}
-function changesToggle(a){if(!changeBase(a))return "";return '<label class="check chg-t"><input type="checkbox" data-showchanges="1"'+(S.showChanges?" checked":"")+'> Show changes</label>';}
+/* Items sent before change tracking existed: save what's there now as the starting point. */
+var baselined={};
+function ensureBaseline(a){if(S.mode!=="team"||!a||a.sentCopy||a.status==="draft"||a.status==="archived"||baselined[a.id])return;baselined[a.id]=1;
+  setTimeout(function(){var cur=S.ads[a.id];if(!cur||cur.sentCopy)return;var n=clone(cur);var m={};fieldMap(n).forEach(function(x){m[x[0]]=[x[1],x[2]];});n.sentCopy=m;n.sentVersion=n.version;saveAd(n);},0);}
+function resolvedCount(a){var n=0,cnt=function(l){(l&&l.comments||[]).forEach(function(c){if(c.resolved)n++;});};allLines(a).forEach(cnt);(a.overall||[]).forEach(function(c){if(c.resolved)n++;});if(a.featured)cnt(a.featured);if(a.metaTitle)cnt(a.metaTitle);if(a.metaDesc)cnt(a.metaDesc);return n;}
+function resolvedToggle(a){var n=resolvedCount(a);if(!n)return "";return '<label class="check chg-t"><input type="checkbox" data-showresolved="1"'+(S.showResolved?" checked":"")+'> Show '+n+' resolved comment'+(n>1?"s":"")+'</label>';}
+function changesToggle(a){ensureBaseline(a);var rt=resolvedToggle(a);if(!changeBase(a))return rt?'<div class="row tg-row">'+rt+'</div>':"";return '<div class="row tg-row"><label class="check chg-t"><input type="checkbox" data-showchanges="1"'+(S.showChanges?" checked":"")+'> Show changes</label>'+rt+'</div>';}
 function copyLines(a){return a.primaries.concat(a.headlines,[a.description,a.ctaLine]);}
 function allLines(a){var x=linesOfKind(a);return x||copyLines(a).concat(a.creatives);}
 function openComments(a){var n=0;allLines(a).forEach(function(l){(l.comments||[]).forEach(function(c){if(!c.resolved&&c.role==="client")n++;});});(a.overall||[]).forEach(function(c){if(!c.resolved&&c.role==="client")n++;});return n;}
@@ -153,7 +166,9 @@ function render(){
 /* ---------- shared bits ---------- */
 function statusPill(st,team,x){var map=team?TEAM_ST:CLIENT_ST;var t=map[st]||st;if(st==="approved"&&x&&x.withChanges)t=team?"Approved with changes":"Approved with your changes";return '<span class="pill st-'+st+'">'+esc(t)+'</span>';}
 function logoHtml(c,cls){cls=cls||"";return c&&c.logoId?'<img class="logo '+cls+'" src="'+esc(blob(c.logoId))+'" alt="">':'<span class="logo '+cls+'">'+esc(initials(c?c.name:"?"))+'</span>';}
+function shownC(c){return !(c&&c.resolved)||S.showResolved;}
 function commentHtml(c,kind,i,ci,team){
+  if(!shownC(c))return "";
   var cls="cmt"+(c.resolved?" done":(c.role==="team"?" team":""));
   var tag=c.resolved?"Resolved by "+esc(c.resolvedByName||"Gordon Digital"):(c.role==="team"?"Gordon Digital reply":"");
   var res=team&&!c.resolved&&c.role==="client"?'<button type="button" class="btn sm" data-act="resolve" data-k="'+kind+'" data-i="'+i+'" data-ci="'+ci+'">Mark resolved</button>':"";
@@ -480,13 +495,13 @@ function socialPreview(a,c){
 function designViewer(a,interactive){
   var files=a.creatives||[];if(!files.length)return '<div class="card empty">No designs uploaded yet.</div>';
   var i=Math.min(S.fileIdx||0,files.length-1),f=files[i];
-  var tabs=files.length>1?'<div class="chips" role="group" aria-label="Designs">'+files.map(function(x,j){return '<button type="button" data-act="fileTab" data-i="'+j+'" aria-pressed="'+(j===i)+'">'+esc(x.label||("Design "+(j+1)))+((x.comments||[]).length?' · '+x.comments.length:'')+'</button>';}).join("")+'</div>':'';
+  var tabs=files.length>1?'<div class="chips" role="group" aria-label="Designs">'+files.map(function(x,j){return '<button type="button" data-act="fileTab" data-i="'+j+'" aria-pressed="'+(j===i)+'">'+esc(x.label||("Design "+(j+1)))+((x.comments||[]).filter(shownC).length?' · '+x.comments.filter(shownC).length:'')+'</button>';}).join("")+'</div>':'';
   var isPdf=/pdf/i.test(f.type||"")||/\.pdf$/i.test(f.fileName||"");
   var body;
   if(!f.assetId)body='<div class="card empty">No file yet.</div>';
   else if(isPdf)body='<div class="card" style="align-items:flex-start"><b>'+esc(f.fileName)+'</b><span class="small muted">PDF designs open outside the portal. Upload PNG or JPG versions to comment on the design directly.</span><button type="button" class="btn" data-act="dlAsset" data-id="'+esc(f.assetId)+'" data-name="'+esc(f.fileName)+'">Download PDF</button></div>';
   else{
-    var n=0;var pins=(f.comments||[]).map(function(cm,ci){if(cm.x==null)return "";n++;var on=S.pinFocus===ci&&!S.pin;return '<button type="button" id="pin-'+ci+'" class="pin'+(cm.resolved?" done":"")+(cm.role==="team"?" team":"")+(on?" on":"")+'" style="left:'+cm.x+'%;top:'+cm.y+'%" data-act="pinFocus" data-ci="'+ci+'" title="'+esc(cm.text)+'" aria-label="Comment '+n+'">'+n+'</button>'+(on?'<div class="pin-pop view'+(cm.x>55?" flip":"")+(cm.y>70?" up":"")+'" style="left:'+cm.x+'%;top:'+cm.y+'%"><div class="row" style="justify-content:space-between;gap:8px"><b class="small">'+n+'. '+esc(personName(cm))+'</b><button type="button" class="linkbtn" style="padding:0" data-act="pinClose" aria-label="Close">✕</button></div><p class="small" style="margin:0;white-space:pre-line">'+esc(cm.text)+'</p>'+((cm.replies||[]).length?'<span class="tiny muted">'+cm.replies.length+' repl'+(cm.replies.length>1?"ies":"y")+' below</span>':'')+(cm.resolved?'<span class="tiny muted">Resolved</span>':'')+'</div>':'');}).join("");
+    var n=0;var pins=(f.comments||[]).map(function(cm,ci){if(cm.x==null||!shownC(cm))return "";n++;var on=S.pinFocus===ci&&!S.pin;return '<button type="button" id="pin-'+ci+'" class="pin'+(cm.resolved?" done":"")+(cm.role==="team"?" team":"")+(on?" on":"")+'" style="left:'+cm.x+'%;top:'+cm.y+'%" data-act="pinFocus" data-ci="'+ci+'" title="'+esc(cm.text)+'" aria-label="Comment '+n+'">'+n+'</button>'+(on?'<div class="pin-pop view'+(cm.x>55?" flip":"")+(cm.y>70?" up":"")+'" style="left:'+cm.x+'%;top:'+cm.y+'%"><div class="row" style="justify-content:space-between;gap:8px"><b class="small">'+n+'. '+esc(personName(cm))+'</b><button type="button" class="linkbtn" style="padding:0" data-act="pinClose" aria-label="Close">✕</button></div><p class="small" style="margin:0;white-space:pre-line">'+esc(cm.text)+'</p>'+((cm.replies||[]).length?'<span class="tiny muted">'+cm.replies.length+' repl'+(cm.replies.length>1?"ies":"y")+' below</span>':'')+(cm.resolved?'<span class="tiny muted">Resolved</span>':'')+'</div>':'');}).join("");
     var draft=S.pin&&S.pin.i===i?'<span class="pin new" style="left:'+S.pin.x+'%;top:'+S.pin.y+'%">+</span><div class="pin-pop'+(S.pin.x>55?" flip":"")+(S.pin.y>70?" up":"")+'" style="left:'+S.pin.x+'%;top:'+S.pin.y+'%"><textarea class="in" id="pin-draft" rows="3" data-pdraft="1" placeholder="What would you like changed here?">'+esc(S.pdraft||"")+'</textarea><div class="row" style="justify-content:flex-end;gap:6px"><button type="button" class="btn sm" data-act="cancelPin">Cancel</button><button type="button" class="btn sm dark" data-act="postPin">Post</button></div></div>':'';
     var mob=/mobile|phone/i.test(f.label||"")||(f.w&&f.w<=900);body='<div class="pin-outer"><div class="pin-wrap'+(interactive?" live":"")+(mob?" mob":"")+'" data-file="'+i+'"'+(f.w?' style="max-width:'+(mob?Math.min(f.w,414):f.w)+'px"':'')+'><img class="pin-img" src="'+esc(blob(f.assetId))+'" alt="'+esc(f.label||"Design")+'">'+pins+draft+'</div></div>';
   }
@@ -538,7 +553,7 @@ function pinPanel(a,locked){
   var files=a.creatives||[],i=Math.min(S.fileIdx||0,Math.max(0,files.length-1)),f=files[i];
   var h='<div class="card"><span class="eyebrow">Comments on the design</span>';
   if(S.pin&&S.pin.i===i&&!locked)h+='<p class="small muted">Write your comment in the box on the design.</p>';
-  var n=0,list=f?(f.comments||[]).map(function(cm,ci){var num=cm.x!=null?++n:null;return '<div class="pinrow'+(S.pinFocus===ci?" on":"")+'" id="pc-'+ci+'">'+(num?'<button type="button" class="pin sm'+(cm.resolved?" done":"")+'" data-act="pinFocus" data-from="list" data-ci="'+ci+'" aria-label="Show comment '+num+' on the design">'+num+'</button>':'')+'<div style="flex:1;min-width:0">'+commentHtml(cm,"c",i,ci,S.mode==="team")+'</div></div>';}).join(""):"";
+  var n=0,list=f?(f.comments||[]).map(function(cm,ci){if(!shownC(cm))return "";var num=cm.x!=null?++n:null;return '<div class="pinrow'+(S.pinFocus===ci?" on":"")+'" id="pc-'+ci+'">'+(num?'<button type="button" class="pin sm'+(cm.resolved?" done":"")+'" data-act="pinFocus" data-from="list" data-ci="'+ci+'" aria-label="Show comment '+num+' on the design">'+num+'</button>':'')+'<div style="flex:1;min-width:0">'+commentHtml(cm,"c",i,ci,S.mode==="team")+'</div></div>';}).join(""):"";
   h+=list||(S.pin?'':'<p class="small muted">'+(locked?"No comments.":"No comments yet. Click the design to add one.")+'</p>');
   return h+'</div>';
 }
@@ -584,8 +599,8 @@ function seoDoc(a,locked){
       (a.metaTitle&&a.metaTitle.comments||[]).map(function(cm,ci){return commentHtml(cm,"mt",0,ci,S.mode==="team");}).join("")+(a.metaDesc&&a.metaDesc.comments||[]).map(function(cm,ci){return commentHtml(cm,"md",0,ci,S.mode==="team");}).join("")+composer("mt0","mt",0,"Your comment on the page title","Add comment")+composer("md0","md",0,"Your comment on the description","Add comment")+'</div>';
   }
   var paras=a.paras||[];
-  h+='<div class="dbody">'+(paras.length?paras.map(function(p,i){var key="pa"+i,has=(p.comments||[]).length;
-    return '<div class="para'+(has?" has":"")+'">'+paraHtml(p.text)+(locked||S.composer===key?'':'<button type="button" class="btn sm pc" data-act="compose" data-v="'+key+'">Comment</button>')+((p.comments||[]).length?'<div class="pcm">'+p.comments.map(function(cm,ci){return commentHtml(cm,"pa",i,ci,S.mode==="team");}).join("")+'</div>':'')+composer(key,"pa",i,"Your comment on this paragraph","Add comment")+'</div>';}).join(""):'<p class="muted">No content yet.</p>')+'</div>';
+  h+='<div class="dbody">'+(paras.length?paras.map(function(p,i){var key="pa"+i,has=(p.comments||[]).filter(shownC).length;
+    return '<div class="para'+(has?" has":"")+'">'+paraHtml(p.text)+(locked||S.composer===key?'':'<button type="button" class="btn sm pc" data-act="compose" data-v="'+key+'">Comment</button>')+(has?'<div class="pcm">'+p.comments.map(function(cm,ci){return commentHtml(cm,"pa",i,ci,S.mode==="team");}).join("")+'</div>':'')+composer(key,"pa",i,"Your comment on this paragraph","Add comment")+'</div>';}).join(""):'<p class="muted">No content yet.</p>')+'</div>';
   h+='<span class="tiny muted">'+wordCount(a.body)+' words</span></article>';
   return h;
 }
@@ -780,7 +795,7 @@ function kindEditor(a,c){
     h+=sec("Featured image",fe?"":"Optional. The main image shown at the top of the "+(a.contentType==="Page"?"page":"article")+" and when it's shared.",fe?'<div class="panel'+(lineHasIssue(fe)?" warn":"")+'"><img class="feat" src="'+esc(blob(fe.assetId))+'" alt="'+esc(fe.alt||"")+'"><div class="row" style="justify-content:space-between;align-items:flex-end"><span class="tiny muted">'+esc(fe.fileName||"")+(fe.w?" · "+fe.w+" × "+fe.h:"")+'</span>'+(editable?'<span class="row" style="gap:6px">'+(assets?'<span class="btn sm filebtn">Replace<input type="file" accept="image/*" data-upload="feature" aria-label="Replace featured image"></span>':'')+'<button type="button" class="btn sm" data-act="removeFeatured">Remove</button></span>':'')+'</div><label class="f" for="fe-alt">Alt text<input class="in" id="fe-alt" data-falt="1" value="'+esc(fe.alt||"")+'" placeholder="Describe the image for search engines and screen readers"'+(editable?"":" disabled")+'></label>'+(fe.comments||[]).map(function(cm,ci){return commentHtml(cm,"fi",0,ci,true);}).join("")+'</div>':(editable?(assets?'<div class="drop"><div><h3>Upload featured image</h3><p class="small muted">JPG or PNG. 1200 × 630 works well for blogs and social sharing.</p></div><span class="btn accent filebtn">Choose image<input type="file" accept="image/*" data-upload="feature" aria-label="Upload featured image"></span></div>':'<p class="notice">You need edit access to this page to upload files.</p>'):'<p class="small muted">No featured image.</p>'));
     h+=sec("Search result","How the page shows in Google.",teamField(a,"mt",0,a.metaTitle||L(""),"Page title",60,editable,false)+teamField(a,"md",0,a.metaDesc||L(""),"Meta description",155,editable,true));
     h+=sec(a.contentType==="Page"?"Page copy":"Article","Use the bar to add headings, lists, bold and links. Pasting from Google Docs or Word keeps the formatting. "+wordCount(a.body)+" words.",rteHtml(a,editable));
-    var pc=(a.paras||[]).map(function(p,i){return (p.comments||[]).length?'<div class="panel"><span class="small muted">'+esc(cut(htmlText(p.text)||p.text,140))+'</span>'+p.comments.map(function(cm,ci){return commentHtml(cm,"pa",i,ci,true);}).join("")+'</div>':'';}).join("");
+    var pc=(a.paras||[]).map(function(p,i){return (p.comments||[]).filter(shownC).length?'<div class="panel"><span class="small muted">'+esc(cut(htmlText(p.text)||p.text,140))+'</span>'+p.comments.map(function(cm,ci){return commentHtml(cm,"pa",i,ci,true);}).join("")+'</div>':'';}).join("");
     if(pc)h+=sec("Client comments on paragraphs","",pc);
   }else if(k==="social"){
     var pl=a.platforms||[];
@@ -998,7 +1013,7 @@ function teamField(a,kind,i,l,label,limit,editable,area){
   }else body='<div class="txt">'+esc(l.text)+'</div>';
   var sent=a.status!=="draft";
   return '<div class="panel'+(lineHasIssue(l)?" warn":"")+'"><div class="lbl"><span>'+esc(label)+'</span><span class="row" style="gap:10px">'+(sent&&l.state!=="none"?'<span class="pill '+(l.state==="ok"?"ok":"rw")+'">Client: '+stLabel+'</span>':'')+'<span class="num" id="cnt-'+key+'" style="font-weight:400;color:'+(over?"var(--warn)":"var(--muted)")+'" data-limit="'+(limit||"")+'">'+count+'</span></span></div>'+body+
-    (l.comments||[]).map(function(cm,ci){return commentHtml(cm,kind,i,ci,true);}).join("")+(!sent?"":(S.composer===key?composer(key,kind,i,"Reply on "+label.toLowerCase(),"Send reply"):((l.comments||[]).length?'<button type="button" class="btn sm" style="align-self:flex-start" data-act="compose" data-v="'+key+'">Reply to client</button>':"")))+'</div>';
+    (l.comments||[]).map(function(cm,ci){return commentHtml(cm,kind,i,ci,true);}).join("")+(!sent?"":(S.composer===key?composer(key,kind,i,"Reply on "+label.toLowerCase(),"Send reply"):((l.comments||[]).filter(shownC).length?'<button type="button" class="btn sm" style="align-self:flex-start" data-act="compose" data-v="'+key+'">Reply to client</button>':"")))+'</div>';
 }
 
 /* ---------- actions ---------- */
@@ -1146,6 +1161,7 @@ document.addEventListener("input",function(e){var t=e.target;
 document.addEventListener("change",function(e){var t=e.target;
   if(t.dataset.placement){S.placement=t.value;render();return;}
   if(t.dataset.showchanges){S.showChanges=t.checked;render();return;}
+  if(t.dataset.showresolved){S.showResolved=t.checked;render();return;}
   if(t.dataset.dashstrat){S.dashStrat=t.value;render();return;}
   if(t.dataset.splatview){S.splat=t.value;render();return;}
   if(t.dataset.splat){var pn=t.dataset.splat,on=t.checked;editAd(function(a){var l=(a.platforms||[]).filter(function(x){return x!==pn;});if(on)l.push(pn);a.platforms=SOCIAL_PLATFORMS.filter(function(x){return l.indexOf(x)>=0;});});return;}
