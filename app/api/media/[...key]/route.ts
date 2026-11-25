@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTeamUser } from "@/lib/team";
 import { getReviewer, hasAnyReviewer } from "@/lib/reviewer";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getClient } from "@/lib/data";
 
 /** Files are private. The team can open anything; a reviewer can open their own client's files and team photos. */
 export async function GET(_req: Request, { params }: { params: Promise<{ key: string[] }> }) {
@@ -10,7 +11,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ key: st
   if (!/^(c\/[A-Za-z0-9_-]+\/[a-f0-9]{16,64}|t\/[a-f0-9]{16,64})$/.test(key)) return new NextResponse("Not found", { status: 404 });
   let ok = !!(await getTeamUser());
   if (!ok) {
-    if (key.startsWith("c/")) ok = !!(await getReviewer(key.split("/")[1]));
+    if (key.startsWith("c/")) {
+      const cid = key.split("/")[1];
+      const c = await getClient(cid);
+      ok = !!c && !c.archived && !!(await getReviewer(cid));
+    }
     else ok = await hasAnyReviewer();
   }
   if (!ok) return new NextResponse("Not found", { status: 404 });

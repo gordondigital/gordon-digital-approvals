@@ -64,7 +64,8 @@ function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.h
 function fail(e){console.warn(e);toast((e&&e.message)?"Couldn't save: "+e.message:"Couldn't save that change. Check your connection and try again.");}
 
 /* ---------- data ---------- */
-function clientList(){return Object.keys(S.clients).map(function(k){return S.clients[k];}).sort(function(a,b){return a.name.localeCompare(b.name);});}
+function archivedClients(){return Object.keys(S.clients).map(function(k){return S.clients[k];}).filter(function(c){return c.archived;}).sort(function(a,b){return a.name.localeCompare(b.name);});}
+function clientList(){return Object.keys(S.clients).map(function(k){return S.clients[k];}).filter(function(c){return !c.archived;}).sort(function(a,b){return a.name.localeCompare(b.name);});}
 function adsFor(cid,mk){return Object.keys(S.ads).map(function(k){return S.ads[k];}).filter(function(a){return a.clientId===cid&&(a.kind||"meta")==="meta"&&(!mk||a.monthKey===mk);}).sort(function(a,b){return (a.group||"").localeCompare(b.group||"")||(a.order||0)-(b.order||0)||(a.createdAt||"").localeCompare(b.createdAt||"");});}
 function monthsFor(c){var set={};(c.months||[]).forEach(function(m){set[m]=1;});adsFor(c.id).forEach(function(a){set[a.monthKey]=1;});return Object.keys(set).sort().reverse();}
 function latestMonth(c){return monthsFor(c)[0]||null;}
@@ -909,6 +910,12 @@ function clientsPage(){
       return '<div class="card td-c bc-'+g[0]+'"><div class="bhead"><span class="bdot"></span><b>'+(g[0]==="awaiting"?"Overdue with client":g[1])+'</b><span class="bcount">'+its.length+'</span></div><span class="tiny muted">'+g[2]+'</span>'+(its.length?'<div class="td-list">'+its.slice(0,6).map(function(e){var fid=kindOf(e.x)==="meta"?e.x.monthKey:e.x.folderId;return '<button type="button" class="td-row" data-act="openAd" data-c="'+e.c.id+'" data-v="'+e.x.id+'">'+kindTag(e.x)+'<span class="td-t"><b class="small">'+esc(e.x.title||"Untitled")+'</b><span class="tiny muted">'+esc(e.c.name)+' · '+esc(folderName(e.c,kindOf(e.x),fid))+'</span></span></button>';}).join("")+(its.length>6?'<span class="tiny muted">And '+(its.length-6)+' more</span>':'')+'</div>':'<span class="bempty">All clear</span>')+'</div>';}).join("")+'</div>';
   h+='<h2>Clients</h2><div class="cards3">'+(cl.map(function(c){var s=clientSummary(c);
     return '<div class="card cl-c"><div class="row" style="gap:12px;flex-wrap:nowrap">'+logoHtml(c)+'<div style="min-width:0;flex:1"><b>'+esc(c.name)+'</b><div class="small muted">'+esc(c.strategist||"Unassigned")+'</div></div><span class="pill '+(s.wait==="Client"?"st-awaiting":(s.wait==="Nobody"?"st-live":"st-changes"))+'">'+(s.wait==="Gordon Digital"?"On us":(s.wait==="Client"?"On client":(s.total?"All done":"Nothing yet")))+'</span></div><span class="row" style="gap:4px">'+(s.types.length?s.types.map(kTagK).join(""):'<span class="tiny muted">No work yet</span>')+'</span><div class="cl-n"><div><b class="num">'+s.aw+'</b><span>With client</span></div><div><b class="num">'+s.ch+'</b><span>Changes</span></div><div><b class="num">'+s.dr+'</b><span>Drafts</span></div><div><b class="num">'+s.ap+'</b><span>Approved</span></div></div><div class="row" style="flex-wrap:nowrap"><button type="button" class="btn dark" style="flex:1" data-act="openClient" data-v="'+c.id+'">Open</button><button type="button" class="btn" data-act="openSettings" data-v="'+c.id+'">Settings</button></div></div>';}).join("")||'<div class="card muted">No clients for this strategist yet.</div>')+'</div></div>';
+  var ac=archivedClients();
+  if(ac.length)h+='<div class="page" style="padding-top:0"><details class="card arch-cl"'+(S.openArchCl?" open":"")+'><summary><b>Archived clients · '+ac.length+'</b><span class="small muted"> Hidden from the team view. Their client links don\'t work.</span></summary>'+ac.map(function(c){
+    var del=S.confirmDelClient===c.id;
+    return '<div class="arch-row"><div style="flex:1;min-width:0"><b>'+esc(c.name)+'</b><div class="tiny muted">Archived '+esc(shortDate(c.archivedAt))+(c.archivedBy?' by '+esc(c.archivedBy):'')+'</div></div>'+
+      (del?'<div class="del-box"><span class="small">This permanently deletes '+esc(c.name)+', all their work, comments and files. It can\'t be undone. Type the client name to confirm.</span><div class="row"><input class="in" id="del-name" data-delname="1" placeholder="'+esc(c.name)+'" autocomplete="off"><button type="button" class="btn sm" data-act="cancelDelClient">Cancel</button><button type="button" class="btn sm warn-b" data-act="deleteClient" data-v="'+esc(c.id)+'">Delete for good</button></div></div>':
+      '<button type="button" class="btn sm" data-act="restoreClient" data-v="'+esc(c.id)+'">Restore</button><button type="button" class="btn sm" data-act="askDelClient" data-v="'+esc(c.id)+'">Delete</button>')+'</div>';}).join("")+'</details></div>';
   return h;
 }
 function addClientPage(){
@@ -929,7 +936,13 @@ function settingsPage(){
    '<div class="card"><h2>Client approver</h2>'+f("approverName","Name")+f("approverEmail","Email","Gets the portal invite and reminders.")+'<label class="f" for="cs-reminderDays">Overdue after this many working days<input class="in num" type="number" min="1" max="14" id="cs-reminderDays" data-cf="reminderDays" value="'+esc(c.reminderDays||3)+'"></label></div>'+
    '<div class="card"><h2>Approval types</h2><span class="small muted">Turn on what this client approves with us. Each type gets its own folders.</span>'+KINDS.map(function(kk){var on=kk.k==="meta"?((c.platforms||{}).meta!==false):!!(c.platforms||{})[kk.k];return '<label class="check"><input type="checkbox" data-plat="'+kk.k+'"'+(on?" checked":"")+'>'+esc(kk.name)+' <span class="small muted">· folders by '+esc(kk.folder.toLowerCase())+'</span></label>';}).join("")+'</div>'+
    (function(){var sn=c.strategist,pr=person(sn);return '<div class="card"><h2>Gordon Digital contact</h2>'+(sn?'<div class="ov-team">'+personAv(sn)+'<div><b>'+esc(sn)+'</b><div class="small muted">'+esc([pr.title,pr.email,pr.phone].filter(Boolean).join(" · ")||"No details yet")+'</div></div></div>'+(pr.email?'<span class="small muted">Client emails come from '+esc(pr.email)+'. Their details show on the client\'s overview page.</span>':'<p class="notice">'+esc(sn)+' has no email saved, so client emails come from approvals@notify.gordondigital.com.au. Add it on the Team page.</p>')+'<button type="button" class="btn sm" style="align-self:flex-start" data-act="page" data-v="team">Edit on the Team page</button>':'<p class="notice">Choose a strategist above. Their details show on the overview page and client emails come from them.</p>')+'</div>';})()+
-   '<div class="card"><h2>Client portal link</h2><span class="small muted">One private link for everyone at this client. It\'s in every email we send them.</span><button type="button" class="btn sm dark" style="align-self:flex-start" data-act="copyLink">Copy client link</button></div></div></div></div>';
+   '<div class="card"><h2>Client portal link</h2><span class="small muted">One private link for everyone at this client. It\'s in every email we send them.</span><button type="button" class="btn sm dark" style="align-self:flex-start" data-act="copyLink">Copy client link</button></div>'+offboardCard(c)+'</div></div></div>';
+}
+function offboardCard(c){
+  var h='<div class="card"><h2>Offboarding</h2>';
+  if(S.confirmArch===c.id)h+='<p class="notice">Archive '+esc(c.name)+'? Their link stops working straight away and they disappear from the dashboard, menus and reminders. All their work is kept and you can restore them any time.</p><div class="row"><button type="button" class="btn sm" data-act="cancelClientArch">Keep them</button><button type="button" class="btn sm dark" data-act="archiveClient" data-v="'+esc(c.id)+'">Archive client</button></div>';
+  else h+='<span class="small muted">When a client leaves, archive them. Their link stops working and they\'re hidden from the team view. Nothing is deleted.</span><button type="button" class="btn sm" style="align-self:flex-start" data-act="askClientArch" data-v="'+esc(c.id)+'">Archive client</button>';
+  return h+'</div>';
 }
 function teamSettingsPage(){
   var list=strats(),cl=clientList();
@@ -1092,6 +1105,17 @@ var ACT={
     editAd(function(a){var list=d.k==="o"?a.overall:(d.k==="fi"?(a.featured||{}).comments:getLine(a,d.k,+d.i).comments);var c=list&&list[+d.ci];if(!c)return;c.replies=(c.replies||[]).concat([cm]);});toast("Reply added");},
   storyCard:function(d){S.sci=Math.max(0,(S.sci||0)+(+d.v));render();},
   tourStart:function(){tourStart();},
+  askClientArch:function(d){S.confirmArch=d.v;render();},
+  cancelClientArch:function(){S.confirmArch=null;render();},
+  archiveClient:function(d){var c=S.clients[d.v];if(!c)return;S.confirmArch=null;var c2=clone(c);c2.archived=true;c2.archivedAt=now();c2.archivedBy=(S.me&&S.me.name)||"";saveClient(c2);
+    if(GDA.clientAction)GDA.clientAction(c.id,"archive").catch(function(e){toast("Archived, but the link couldn't be switched off: "+e.message);});
+    S.clientId=(clientList()[0]||{}).id||null;S.page="clients";S.openArchCl=true;render();toast(c.name+" archived. Their link no longer works.");},
+  restoreClient:function(d){var c=S.clients[d.v];if(!c)return;var c2=clone(c);c2.archived=false;delete c2.archivedAt;delete c2.archivedBy;saveClient(c2);toast(c.name+" restored. Use Copy client link to send them a new link.");},
+  askDelClient:function(d){S.confirmDelClient=d.v;S.delName="";S.openArchCl=true;render();var t=document.getElementById("del-name");if(t)t.focus();},
+  cancelDelClient:function(){S.confirmDelClient=null;render();},
+  deleteClient:function(d){var c=S.clients[d.v];if(!c)return;if(String(S.delName||"").trim().toLowerCase()!==String(c.name).trim().toLowerCase()){toast("Type the client name exactly to confirm.");return;}
+    if(!GDA.clientAction){toast("Deleting isn't available here.");return;}toast("Deleting "+c.name+"…");
+    GDA.clientAction(c.id,"delete").then(function(){Object.keys(S.ads).forEach(function(id){if(S.ads[id].clientId===c.id)delete S.ads[id];});delete S.clients[c.id];S.confirmDelClient=null;render();toast(c.name+" deleted");},function(e){toast("Couldn't delete: "+e.message);});},
   cpage:function(d){S.cpage=d.v;S.composer=null;render();},
   addColour:function(){var hex=normHex(S.bd.chex);if(!hex){toast("Enter a hex code, e.g. 001D21.");return;}var nm=(S.bd.cname||"").trim();editBrand(function(b){b.colours.push({name:nm,hex:hex});});S.bd.cname="";S.bd.chex="";toast(hex+" added");},
   addFont:function(){var nm=(S.bd.fname||"").trim();if(!nm){toast("Choose a Google font first.");return;}var match=GFONTS.filter(function(g){return g.toLowerCase()===nm.toLowerCase();})[0];var use=(S.bd.fuse||"").trim();editBrand(function(b){b.fonts.push({name:match||nm,use:use,source:"google"});});S.bd.fname="";S.bd.fuse="";toast((match||nm)+" added");},
@@ -1153,6 +1177,7 @@ document.addEventListener("input",function(e){var t=e.target;
   if(t.dataset.nf){if(S.newFolder)S.newFolder.name=t.value;return;}
   if(t.dataset.pdraft){S.pdraft=t.value;return;}
   if(t.dataset.rdraft){S.rdraft=t.value;return;}
+  if(t.dataset.delname){S.delName=t.value;return;}
   if(t.dataset.odraft){S.odraft=t.value;var pb=document.getElementById("c-post");if(pb&&pb.dataset.v!=="changes")pb.disabled=!t.value.trim();else if(pb&&t.value.trim())pb.disabled=false;t.style.height="auto";t.style.height=Math.min(t.scrollHeight,200)+"px";return;}
   if(t.dataset.bd){S.bd[t.dataset.bd]=t.value;if(t.dataset.bd==="chex"){var sw=document.getElementById("hex-sw");if(sw)sw.style.background=normHex(t.value)||"transparent";}return;}
   if(t.dataset.newstrat){S.newStrat=t.value;return;}

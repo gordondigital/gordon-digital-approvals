@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const sentAt = String(d.sentAt || "");
     if (!sentAt) continue;
     const c = cmap.get(it.client_id);
-    if (!c || c.remindersOff) continue;
+    if (!c || c.remindersOff || c.archived) continue;
     const every = Number(c.reminderDays) || 3;
     const prior = (sent || []).filter((r) => r.item_id === it.id && r.sent_for === sentAt).map((r) => r.sent_at).sort().pop();
     const due = prior ? workDays(prior) >= every : workDays(sentAt) > every;

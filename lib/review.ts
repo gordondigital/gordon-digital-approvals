@@ -9,7 +9,7 @@ export async function reviewContext(token: string, needReviewer = true) {
   const link = await findLink(token);
   if (!link) return { error: json({ error: "This review link isn't active. Ask Gordon Digital for a new one." }, 404) } as const;
   const client = await getClient(link.client_id);
-  if (!client) return { error: json({ error: "Not found" }, 404) } as const;
+  if (!client || client.archived) return { error: json({ error: "This review link isn't active. Ask Gordon Digital for a new one." }, 404) } as const;
   const reviewer = await getReviewer(link.client_id);
   if (needReviewer && !reviewer) return { error: json({ error: "Tell us who you are first." }, 401) } as const;
   return { link, client, reviewer, clientId: link.client_id } as const;

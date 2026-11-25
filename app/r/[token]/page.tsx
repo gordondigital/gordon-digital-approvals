@@ -10,7 +10,7 @@ export default async function Review({ params }: { params: Promise<{ token: stri
   const { token } = await params;
   const link = await findLink(token);
   const client = link ? await getClient(link.client_id) : null;
-  if (!link || !client)
+  if (!link || !client || client.archived)
     return (
       <div className="gate">
         <div className="gate-card">

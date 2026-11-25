@@ -13,6 +13,7 @@ export async function POST(req: Request) {
   const clientId = String(body.clientId || "");
   const ids: string[] = Array.isArray(body.itemIds) ? body.itemIds.map(String).slice(0, 200) : [];
   const client = await getClient(clientId);
+  if (client?.archived) return NextResponse.json({ error: "This client is archived." }, { status: 400 });
   if (!client || !ids.length) return NextResponse.json({ error: "Nothing to send" }, { status: 400 });
   const { data } = await supabaseAdmin().from("items").select("id,data").eq("client_id", clientId).eq("status", "awaiting").in("id", ids);
   const items = (data || []).map((r) => r.data as Record<string, unknown>);

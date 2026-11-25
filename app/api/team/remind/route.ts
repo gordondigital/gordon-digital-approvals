@@ -14,6 +14,7 @@ export async function POST(req: Request) {
   if (!item || item.status !== "awaiting") return NextResponse.json({ error: "That item isn't waiting on the client." }, { status: 400 });
   const client = await getClient(item.clientId);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
+  if (client.archived) return NextResponse.json({ error: "This client is archived." }, { status: 400 });
   const to = approverEmails(client);
   if (!to.length) return NextResponse.json({ error: "Add an approver email in client settings first." }, { status: 400 });
   const { count } = await supabaseAdmin().from("items").select("id", { count: "exact", head: true }).eq("client_id", item.clientId).eq("status", "awaiting");
