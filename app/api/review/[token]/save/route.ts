@@ -2,6 +2,7 @@ import { reviewContext, json, approverState, sameOrigin } from "@/lib/review";
 import { mergeClientItem, mergeClientRecord, forClient } from "@/lib/clientMerge";
 import { getItem, saveItem, saveClientRow, teamEmailsFor } from "@/lib/data";
 import { logEvent } from "@/lib/reviewer";
+import { findBrand } from "@/lib/brands";
 import { emails } from "@/lib/email";
 import { appUrl } from "@/lib/env";
 
@@ -18,6 +19,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
 
   if (kind === "clients") {
     if (id !== ctx.clientId) return json({ error: "Not found" }, 404);
+    // Brand assets belong to the whole client; a franchisee link can view them but not change them.
+    if (ctx.brandId) return json({ error: "Brand assets can only be changed by head office." }, 403);
     const next = mergeClientRecord(ctx.client, data);
     await saveClientRow(ctx.clientId, next);
     await logEvent({ client_id: ctx.clientId, type: "brand_updated", actor_name: me.name, actor_email: me.email });
@@ -27,10 +30,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
 
   const item = await getItem(String(id));
   if (!item || item.clientId !== ctx.clientId) return json({ error: "Not found" }, 404);
-  const st = await approverState(ctx.clientId, ctx.client, me.email);
+  if (ctx.brandId && item.brandId !== ctx.brandId) return json({ error: "Not found" }, 404);
+  const st = await approverState(ctx.clientId, ctx.client, me.email, { brandId: ctx.brandId, item });
   if (String(data.status) === "approved" && item.status === "awaiting") {
     if (!st.isApprover) {
-      const who = String(ctx.client.approverName || "your approver");
+      const b = findBrand(ctx.client, item.brandId);
+      const who = String((b && b.approverName) || ctx.client.approverName || "your approver");
       return json({ error: `Only ${who} can approve. Leave a comment or request changes instead.`, code: "not_approver" }, 403);
     }
     if (!st.trusted) return json({ error: "Confirm it's you first.", needCode: true, email: me.email }, 409);

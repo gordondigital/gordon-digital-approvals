@@ -12,7 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   const ctx = await reviewContext(token);
   if ("error" in ctx) return ctx.error;
   const me = ctx.reviewer!;
-  const st = await approverState(ctx.clientId, ctx.client, me.email);
+  const st = await approverState(ctx.clientId, ctx.client, me.email, { brandId: ctx.brandId });
   if (!st.isApprover) return json({ error: "Only approvers can approve." }, 403);
   const sb = supabaseAdmin();
   const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();

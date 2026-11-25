@@ -25,6 +25,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  if (typeof action === "string" && action.startsWith("revokeBrand:")) {
+    const brandId = action.slice("revokeBrand:".length);
+    await sb.from("review_links").update({ revoked_at: new Date().toISOString() }).eq("client_id", id).eq("brand_id", brandId).is("revoked_at", null);
+    await logEvent({ client_id: id, type: "brand_removed", actor_name: me.name, actor_email: me.email, meta: { brandId } });
+    return NextResponse.json({ ok: true });
+  }
+
   if (action === "delete") {
     if (!client.archived) return NextResponse.json({ error: "Archive the client first." }, { status: 400 });
     // Files: everything under c/<clientId>/

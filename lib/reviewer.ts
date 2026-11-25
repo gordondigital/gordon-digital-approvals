@@ -11,9 +11,9 @@ const key = () => new TextEncoder().encode(env("REVIEW_SECRET"));
 export async function findLink(token: string) {
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(token)) return null;
   const sb = supabaseAdmin();
-  const { data } = await sb.from("review_links").select("token, client_id, revoked_at").eq("token", token).maybeSingle();
+  const { data } = await sb.from("review_links").select("token, client_id, brand_id, revoked_at").eq("token", token).maybeSingle();
   if (!data || data.revoked_at) return null;
-  return data as { token: string; client_id: string; revoked_at: string | null };
+  return data as { token: string; client_id: string; brand_id: string | null; revoked_at: string | null };
 }
 
 export async function setReviewer(r: Reviewer) {

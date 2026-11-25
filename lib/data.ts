@@ -34,14 +34,16 @@ export async function getTeamSettings(): Promise<Json | null> {
   return (data?.data as Json) || null;
 }
 
-/** The client's current review link, made if they don't have one yet. */
-export async function reviewLinkFor(clientId: string, createdBy?: string): Promise<string> {
+/** The review link for a client (or one of its brands), made if there isn't one yet. */
+export async function reviewLinkFor(clientId: string, createdBy?: string, brandId?: string | null): Promise<string> {
   const sb = supabaseAdmin();
-  const { data } = await sb.from("review_links").select("token").eq("client_id", clientId).is("revoked_at", null).order("created_at", { ascending: false }).limit(1);
+  let q = sb.from("review_links").select("token").eq("client_id", clientId).is("revoked_at", null);
+  q = brandId ? q.eq("brand_id", brandId) : q.is("brand_id", null);
+  const { data } = await q.order("created_at", { ascending: false }).limit(1);
   let token = data?.[0]?.token as string | undefined;
   if (!token) {
     token = crypto.randomBytes(24).toString("base64url");
-    const { error } = await sb.from("review_links").insert({ token, client_id: clientId, created_by: createdBy || null });
+    const { error } = await sb.from("review_links").insert({ token, client_id: clientId, brand_id: brandId || null, created_by: createdBy || null });
     if (error) throw error;
   }
   return `${appUrl()}/r/${token}`;

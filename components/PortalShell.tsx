@@ -212,7 +212,7 @@ function teamBackend(me: { id: string; name: string }) {
     assets,
     user: { me: async () => ({ id: me.id, name: me.name }), profiles: async () => ({}) },
     hooks: {
-      reviewLink: (clientId: string) => api("/api/team/link", { clientId }).then((r) => r.url),
+      reviewLink: (clientId: string, brandId?: string) => api("/api/team/link", { clientId, brandId }).then((r) => r.url),
       remind: (itemId: string) => api("/api/team/remind", { itemId }),
       clientAction: (clientId: string, action: string) => api("/api/team/client", { clientId, action }),
     },

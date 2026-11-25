@@ -539,3 +539,9 @@ button.pin.sm{cursor:pointer;font-family:inherit}
 .rich td,.rich th,.rte-ed td,.rte-ed th,.doc td,.doc th{border:1px solid var(--line-strong);padding:7px 10px;vertical-align:top;text-align:left;min-width:80px}
 .rich tr:first-child td,.rte-ed tr:first-child td,.rich th,.rte-ed th{background:var(--surface-2)}
 .rich td p,.rte-ed td p,.rich th p,.rte-ed th p{margin:0}
+
+/* brands within a client */
+.btag{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:99px;background:#eef1ef;color:var(--muted)}
+.brand-chips{margin:-6px 0 0}
+.brand-row{display:flex;flex-direction:column;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.brand-row.open{background:var(--surface-2);margin:0 -12px;padding:12px;border-radius:10px}

@@ -8,6 +8,9 @@ var DESTS=["Instant Form","Website","Instant Form + Website"];
 function normDest(d){return d==="On Platform"||!d?"Instant Form":d;}
 var DEFAULT_STRATS=["Tayla","Jess","Danny","Ed","Matt"];
 function strats(){return (S.team&&S.team.strategists&&S.team.strategists.length)?S.team.strategists:DEFAULT_STRATS;}
+/* Team members who manage clients show on the Approvals page and Dashboard. Others (founder, copywriter) can still own drafts. */
+function onBoard(n){var p=person(n);if(p.approvals===true)return true;if(p.approvals===false)return false;return !p.title||/strategist/i.test(p.title);}
+function boardStrats(){return strats().filter(onBoard);}
 function stratOpts(cur){var l=strats().slice();if(cur&&l.indexOf(cur)<0)l.push(cur);return '<option value=""'+(!cur?" selected":"")+'>Unassigned</option>'+l.map(function(o){return '<option value="'+esc(o)+'"'+(cur===o?" selected":"")+'>'+esc(o)+(strats().indexOf(o)<0?" (no longer on the team)":"")+'</option>';}).join("");}
 var RATIOS=[["1:1","1:1 · Facebook and Instagram feed"],["9:16","9:16 · Stories and Reels"]];
 var TEAM_ST={draft:"Draft · not sent",awaiting:"With client",changes:"Changes requested",approved:"Approved · ready to launch",live:"Live",archived:"Archived"};
@@ -211,6 +214,7 @@ function platformCut(t,chars,lines){t=String(t||"");var ls=t.split("\n"),out=[],
 function cut(t,n){if(t.length<=n)return t;var c=t.slice(0,n);return c.slice(0,c.lastIndexOf(" "))+"...";}
 function firstFilled(arr,i){i=Math.min(i,arr.length-1);if(hasText(arr[i]))return i;for(var k=0;k<arr.length;k++)if(hasText(arr[k]))return k;return Math.max(0,i);}
 function previewHtml(a,c){
+  c=brandView(c,a);
   var pI=firstFilled(a.primaries,S.pIdx),hI=firstFilled(a.headlines,S.hIdx);
   var full=a.primaries[pI].text,hlText=a.headlines[hI].text;
   var av=c&&c.logoId?'<img class="av" src="'+esc(blob(c.logoId))+'" alt="">':'<span class="av">'+esc(initials(c.name))+'</span>';
@@ -413,7 +417,18 @@ function allItems(cid){return Object.keys(S.ads).map(function(id){return S.ads[i
 function curFolder(){return S.kind==="meta"?S.monthKey:S.folderId;}
 function seen(x){return x.status!=="draft"&&x.status!=="archived";}
 function isDone(x){return x.status==="approved"||x.status==="live";}
-function itemSub(x){
+/* Brands within a client: franchisees or sister brands, each with its own approver and optionally its own website and socials. */
+function subBrands(c){return ((c&&c.brands)||[]).filter(function(b){return b&&b.id;});}
+function subBrand(c,id){return id?subBrands(c).filter(function(b){return b.id===id;})[0]||null:null;}
+function brandView(c,a){var b=a&&subBrand(c,a.brandId);if(!b)return c;var v={};for(var k in c)v[k]=c[k];["name","logoId","website","ig","landing","approverName","approverEmail"].forEach(function(f){if(b[f])v[f]=b[f];});return v;}
+function brandTag(c,x){var b=subBrand(c,x.brandId);return b&&subBrands(c).length?'<span class="btag">'+esc(b.name||"Brand")+'</span>':'';}
+function inBrandFilter(x){var f=S.brandFilter&&S.brandFilter[x.clientId];if(!f||f==="all")return true;if(f==="none")return !x.brandId;return x.brandId===f;}
+function brandChips(c){var bs=subBrands(c);if(!bs.length)return "";var f=(S.brandFilter&&S.brandFilter[c.id])||"all";
+  return '<div class="chips brand-chips" role="group" aria-label="Filter by brand"><button type="button" data-act="brandFilter" data-v="all" aria-pressed="'+(f==="all")+'">All brands</button><button type="button" data-act="brandFilter" data-v="none" aria-pressed="'+(f==="none")+'">'+esc(c.name)+'</button>'+bs.map(function(b){return '<button type="button" data-act="brandFilter" data-v="'+esc(b.id)+'" aria-pressed="'+(f===b.id)+'">'+esc(b.name||"Unnamed")+'</button>';}).join("")+'</div>';}
+function brandSel(a,c,editable){var bs=subBrands(c);if(!bs.length)return "";return '<label class="f" for="ad-brandId">Brand<select class="in" id="ad-brandId" data-adf="brandId"'+(editable?"":" disabled")+'><option value="">'+esc(c.name)+' (head office)</option>'+bs.map(function(b){return '<option value="'+esc(b.id)+'"'+(a.brandId===b.id?" selected":"")+'>'+esc(b.name||"Unnamed")+'</option>';}).join("")+'</select><span class="h">Who reviews it: '+esc(brandView(c,a).approverName||"the client approver")+'. Their previews use this brand\'s name and logo.</span></label>';}
+function defaultBrand(c){var f=S.brandFilter&&S.brandFilter[c.id];return f&&f!=="all"&&f!=="none"&&subBrand(c,f)?f:"";}
+function itemSub(x){var bc=S.clients[x.clientId],bb=bc&&(S.mode==="team"?subBrands(bc).length>0:subBrands(bc).length>1)?subBrand(bc,x.brandId):null;return (bb?(bb.name||"Brand")+" · ":"")+itemSub0(x);}
+function itemSub0(x){
   var k=kindOf(x);
   if(k==="meta")return plainFormat(x.type)+" · Version "+x.version;
   if(k==="search")return "Search ad · Version "+x.version;
@@ -459,6 +474,7 @@ function wordCount(t){return (String(t||"").match(/\S+/g)||[]).length;}
 
 /* ---------- previews for the new kinds ---------- */
 function googlePreview(a,c){
+  c=brandView(c,a);
   var hs=(a.headlines||[]).filter(hasText).map(function(l){return l.text;}),ds=(a.descriptions||[]).filter(hasText).map(function(l){return l.text;});
   var n=Math.max(1,hs.length),off=(S.gComb||0)%n;
   var pickH=[];for(var i=0;i<Math.min(3,hs.length);i++)pickH.push(hs[(off+i)%hs.length]);
@@ -472,6 +488,7 @@ function googlePreview(a,c){
 }
 function fcHtml(a,name,ig){var t=a.firstComment&&a.firstComment.text;if(!t||!t.trim())return "";return '<div class="fc'+(ig?" ig":"")+'"><b>'+name+'</b> '+esc(platformCut(t,ig?125:160,2).text)+(t.length>(ig?125:160)?'<span class="moretxt">... more</span>':'')+'<div class="fc-l">First comment</div></div>';}
 function socialPreview(a,c){
+  c=brandView(c,a);
   var plats=(a.platforms||[]).filter(function(x){return SOCIAL_PLATFORMS.indexOf(x)>=0;});if(!plats.length)plats=["Facebook"];
   if(plats.indexOf(S.splat)<0)S.splat=plats[0];
   var p=S.splat,full=(a.caption&&a.caption.text)||"";
@@ -577,7 +594,7 @@ function gbpEditor(a,c,editable,inp,ownerSel,sec,overall){
   return h;
 }
 function gbpDoc(a,locked){
-  var c=S.clients[a.clientId],t=a.gbpType||"Update",txt=(a.gbpText&&a.gbpText.text)||"",cut3=platformCut(txt,250,4);
+  var c=brandView(S.clients[a.clientId],a),t=a.gbpType||"Update",txt=(a.gbpText&&a.gbpText.text)||"",cut3=platformCut(txt,250,4);
   var av=c&&c.logoId?'<img src="'+esc(blob(c.logoId))+'" alt="">':esc(initials(c.name));
   var fe=a.featured&&a.featured.assetId?a.featured:null;
   var dates=(a.gbpStart||a.gbpEnd)?niceDate(a.gbpStart)+(a.gbpEnd?" to "+niceDate(a.gbpEnd):""):"";
@@ -753,10 +770,10 @@ function kindWorkPage(){
   var fl=folderList(c,k);
   if(!S.folderId||!fl.some(function(f){return f.id===S.folderId;}))S.folderId=(fl.filter(function(f){return !f.archived;})[0]||{}).id||null;
   if(!S.folderId)return '<div class="page"><div class="head"><div class="l"><span class="eyebrow">'+esc(c.name)+' / '+esc(kk.name)+'</span><h1>No '+esc(kk.folder.toLowerCase())+' folders yet</h1><span class="muted">Use '+esc(kk.add)+' in the sidebar to create the first one.</span></div><button type="button" class="btn go" data-act="addFolder" data-k="'+k+'">'+esc(kk.add)+'</button></div></div>';
-  var items=itemsIn(c.id,k,S.folderId),arch=folderArchived(c,k,S.folderId);
+  var items=itemsIn(c.id,k,S.folderId).filter(inBrandFilter),arch=folderArchived(c,k,S.folderId);
   var a=S.ads[S.adId];if(!a||a.clientId!==c.id||a.kind!==k||a.folderId!==S.folderId){a=items[0]||null;S.adId=a?a.id:null;S.fileIdx=0;}
   var h='<div class="head"><div class="l"><span class="eyebrow">'+esc(c.name)+' / '+esc(kk.name)+(arch?' · Archived':'')+'</span><h1>'+esc(folderName(c,k,S.folderId))+'</h1></div><div class="row">'+archBtn(c,k,S.folderId,items)+(items.length?'':'<button type="button" class="btn" data-act="removeFolder">Remove</button>')+'<button type="button" class="btn" data-act="addItem">'+esc(kk.addItem||("Add "+kk.unit))+'</button><button type="button" class="btn dark" data-act="asClient" data-v="'+c.id+'">Preview as client</button></div></div>';
-  h+=folderArchNotice(c,k,S.folderId,items);
+  h+=folderArchNotice(c,k,S.folderId,items)+brandChips(c);
   Object.keys(S.batch).forEach(function(id){var x=S.ads[id];if(!x||!canSend(x)||x.clientId!==c.id||x.kind!==k||x.folderId!==S.folderId)delete S.batch[id];});
   var ready=items.filter(canSend),nb=Object.keys(S.batch).length;
   var bar=ready.length?'<div class="bbar"><div class="lbl"><span class="eyebrow">Send to client</span><button type="button" class="btn sm" data-act="batchAll">'+(nb===ready.length?"Clear":"Select all "+ready.length)+'</button></div><span class="small muted">'+(nb?nb+" of "+ready.length+" ready selected.":"Tick what to send together. The client gets one notification per batch.")+'</span><button type="button" class="btn go" data-act="sendBatch"'+(nb?"":" disabled")+'>'+(nb?"Send "+nb+" "+(nb>1?kk.units:kk.unit)+" to client":"Select "+kk.units+" to send")+'</button></div>':"";
@@ -777,7 +794,7 @@ function kindEditor(a,c){
   var h='<div class="card"><div class="lbl" style="align-items:flex-start"><h2>'+esc(a.title||"Untitled")+'</h2>'+statusPill(a.status,true,a)+'</div><div class="row" style="justify-content:space-between;align-items:center"><p class="small" style="flex:1;min-width:220px">'+esc(notes[a.status]||"Archived. Hidden from the client and kept for the record.")+'</p><div class="row">'+acts+'</div></div>'+itemArchNotice(a)+(S.confirmDelete===a.id?'<div class="notice row" style="justify-content:space-between">Delete this draft for good?<span class="row"><button type="button" class="btn sm" data-act="cancelDelete">Keep it</button><button type="button" class="btn sm dark" data-act="confirmDelete">Delete</button></span></div>':"")+changesToggle(a)+(editable&&oc?'<p class="notice">'+oc+' client comment'+(oc>1?"s are":" is")+' still open. '+(fix?'Make the edits and resolve them before you mark it live.':'Resolve them before you send the new version.')+'</p>':"")+'</div>';
   if(S.showChanges)h+=changesPanel(a);
   var inp=function(key,label,help,type,limit){var v=a[key]||"";return '<label class="f" for="ad-'+key+'">'+label+'<input class="in" '+(type?'type="'+type+'" ':'')+'id="ad-'+key+'" data-adf="'+key+'" value="'+esc(v)+'"'+(limit?' maxlength="'+limit+'"':'')+(editable?"":" disabled")+'>'+(help?'<span class="h">'+help+'</span>':'')+'</label>';};
-  var ownerSel='<label class="f" for="ad-owner">Owner<select class="in" id="ad-owner" data-adf="owner">'+stratOpts(a.owner)+'</select></label>';
+  var ownerSel='<label class="f" for="ad-owner">Owner<select class="in" id="ad-owner" data-adf="owner">'+stratOpts(a.owner)+'</select></label>'+brandSel(a,c,editable);
   var sec=function(t,note,body){return '<div style="display:flex;flex-direction:column;gap:10px"><div style="padding:0 4px"><h3>'+t+'</h3>'+(note?'<span class="small muted">'+note+'</span>':'')+'</div>'+body+'</div>';};
   var overall=a.status!=="draft"?'<div class="card"><span class="eyebrow">Overall client feedback</span>'+((a.overall||[]).length?a.overall.map(function(cm,ci){return commentHtml(cm,"o",0,ci,true);}).join(""):'<p class="small muted">No overall comments.</p>')+(S.composer==="o0"?composer("o0","o",0,"Reply to the client","Send reply"):'<button type="button" class="btn sm" style="align-self:flex-start" data-act="compose" data-v="o0">Reply to the client</button>')+'</div>':'';
   var uploader=function(label,help,accept){return editable?(assets?'<div class="drop"><div><h3>'+label+'</h3><p class="small muted">'+help+'</p></div><span class="btn accent filebtn">Choose files<input type="file" accept="'+accept+'" multiple data-upload="kfile" aria-label="'+esc(label)+'"></span></div>':'<p class="notice">You need edit access to this page to upload files.</p>'):'';};
@@ -877,7 +894,7 @@ function teamBoard(rows){
   var all=[];rows.forEach(function(r){r.s.items.forEach(function(x){all.push({c:r.c,x:x});});});
   var kinds=KINDS.filter(function(kk){return all.some(function(e){return kindOf(e.x)===kk.k;});});
   var shown=all.filter(function(e){return (f==="all"||kindOf(e.x)===f)&&(st==="All"||(st==="Unassigned"?!e.c.strategist:e.c.strategist===st));});
-  var h='<div class="lbl" style="align-items:flex-end;flex-wrap:wrap;gap:10px"><h2>Pipeline</h2><div class="row" style="gap:8px"><label class="sr" for="dash-strat">Strategist</label><select class="in" id="dash-strat" data-dashstrat="1" style="width:auto;padding:5px 10px;font-size:13px">'+["All"].concat(strats(),["Unassigned"]).map(function(n){return '<option'+(n===st?" selected":"")+'>'+esc(n)+'</option>';}).join("")+'</select>'+(kinds.length>1?'<div class="chips" role="group" aria-label="Filter by type"><button type="button" data-act="dashKind" data-v="all" aria-pressed="'+(f==="all")+'">All</button>'+kinds.map(function(kk){return '<button type="button" data-act="dashKind" data-v="'+kk.k+'" aria-pressed="'+(f===kk.k)+'">'+esc(KTAG[kk.k][0])+'</button>';}).join("")+'</div>':'')+'</div></div>';
+  var h='<div class="lbl" style="align-items:flex-end;flex-wrap:wrap;gap:10px"><h2>Pipeline</h2><div class="row" style="gap:8px"><label class="sr" for="dash-strat">Strategist</label><select class="in" id="dash-strat" data-dashstrat="1" style="width:auto;padding:5px 10px;font-size:13px">'+["All"].concat(boardStrats(),["Unassigned"]).map(function(n){return '<option'+(n===st?" selected":"")+'>'+esc(n)+'</option>';}).join("")+'</select>'+(kinds.length>1?'<div class="chips" role="group" aria-label="Filter by type"><button type="button" data-act="dashKind" data-v="all" aria-pressed="'+(f==="all")+'">All</button>'+kinds.map(function(kk){return '<button type="button" data-act="dashKind" data-v="'+kk.k+'" aria-pressed="'+(f===kk.k)+'">'+esc(KTAG[kk.k][0])+'</button>';}).join("")+'</div>':'')+'</div></div>';
   var cut30=new Date(Date.now()-30*86400000).toISOString();
   h+='<div class="board b5">'+TEAM_COLS.map(function(col){
     var its=shown.filter(function(e){return e.x.status===col[0]&&(col[0]!=="live"||(e.x.updatedAt||"")>=cut30);});
@@ -894,7 +911,7 @@ function dashPage(){
   var h='<div class="page"><div class="head"><div class="l"><span class="eyebrow">Management dashboard</span><h1>Every client. Every strategist. One status.</h1><span class="muted">Across Meta, Google Search, landing pages, website, content and social.</span></div><button type="button" class="btn go" data-act="page" data-v="addClient">Add client</button></div>';
   h+='<div class="grid4 g5"><div class="stat a"><b class="num">'+sum("aw")+'</b><span>With clients for approval</span></div><div class="stat d"><b class="num">'+overdue+'</b><span>Overdue approvals</span></div><div class="stat s"><b class="num">'+sum("ch")+'</b><span>Changes to make</span></div><div class="stat"><b class="num">'+sum("ap")+'</b><span>Approved, ready to go live</span></div><div class="stat x"><b class="num">'+sum("dr")+'</b><span>Drafts not sent</span></div></div>';
   h+=teamBoard(rows);
-  var wl=strats().slice();if(rows.some(function(r){return !r.c.strategist||strats().indexOf(r.c.strategist)<0;}))wl.push("Unassigned");
+  var wl=boardStrats().slice();if(rows.some(function(r){return !r.c.strategist||strats().indexOf(r.c.strategist)<0;}))wl.push("Unassigned");
   h+='<h2>Strategist workload</h2><div class="wl">'+wl.map(function(n){var mine=rows.filter(function(r){return n==="Unassigned"?(!r.c.strategist||strats().indexOf(r.c.strategist)<0):r.c.strategist===n;});
     var act=mine.reduce(function(k,r){return k+r.s.ch+r.s.dr+r.s.ap;},0),wc=mine.reduce(function(k,r){return k+r.s.aw;},0),od=mine.reduce(function(k,r){return k+r.s.items.filter(function(x){return x.status==="awaiting"&&workDays(x.sentAt)>(r.c.reminderDays||3);}).length;},0);
     return '<button type="button" class="card wl-c" data-act="strat" data-v="'+esc(n)+'"><div class="row" style="gap:10px">'+personAv(n)+'<div style="flex:1;min-width:0"><b>'+esc(n)+'</b><div class="tiny muted">'+mine.length+' client'+(mine.length===1?"":"s")+'</div></div></div><div class="wl-n"><div><b class="num">'+act+'</b><span>To action</span></div><div><b class="num">'+wc+'</b><span>With clients</span></div><div'+(od?' class="warn"':'')+'><b class="num">'+od+'</b><span>Overdue</span></div></div></button>';}).join("")+'</div>';
@@ -905,7 +922,7 @@ function dashPage(){
 function clientsPage(){
   var cl=clientList().filter(function(c){return S.strat==="All"||(S.strat==="Unassigned"?(!c.strategist||strats().indexOf(c.strategist)<0):c.strategist===S.strat);});
   var h='<div class="page"><div class="head"><div class="l"><span class="eyebrow">Approvals</span><h1>'+(S.strat==="All"?"All clients":(S.strat==="Unassigned"?"Unassigned clients":esc(S.strat)+"'s clients"))+'</h1><span class="muted">What needs doing across every approval type.</span></div><div class="row"><button type="button" class="btn go" data-act="page" data-v="addClient">Add client</button></div></div>';
-  h+='<div class="chips" role="group" aria-label="Strategist">'+["All"].concat(strats(),["Unassigned"]).map(function(n){return '<button type="button" data-act="strat" data-v="'+esc(n)+'" aria-pressed="'+(S.strat===n)+'">'+esc(n)+'</button>';}).join("")+'</div>';
+  h+='<div class="chips" role="group" aria-label="Strategist">'+["All"].concat(boardStrats(),["Unassigned"]).map(function(n){return '<button type="button" data-act="strat" data-v="'+esc(n)+'" aria-pressed="'+(S.strat===n)+'">'+esc(n)+'</button>';}).join("")+'</div>';
   if(S.flash)h+='<p class="notice" role="status">'+esc(S.flash)+'</p>';
   var groups=[["changes","Changes to make","The client has sent feedback"],["draft","Drafts to send","Finish and add to a batch"],["approved","Approved, ready to go live","Build or publish, then mark live"],["awaiting","Waiting on the client","Chase anything overdue"]];
   var todo=[];cl.forEach(function(c){teamItems(c).forEach(function(x){todo.push({c:c,x:x});});});
@@ -923,7 +940,7 @@ function clientsPage(){
   return h+'</div>';
 }
 function addClientPage(){
-  if(!S.nc)S.nc={name:"",strategist:(S.strat==="All"||S.strat==="Unassigned")?(strats()[0]||""):S.strat,website:"",ig:"",approverName:"",approverEmail:"",meta:true,search:false};
+  if(!S.nc)S.nc={name:"",strategist:(S.strat==="All"||S.strat==="Unassigned")?(boardStrats()[0]||strats()[0]||""):S.strat,website:"",ig:"",approverName:"",approverEmail:"",meta:true,search:false};
   var nc=S.nc,f=function(k,label,help){return '<label class="f" for="nc-'+k+'">'+label+'<input class="in" id="nc-'+k+'" data-nc="'+k+'" value="'+esc(nc[k])+'"><span class="h">'+help+'</span></label>';};
   return '<div class="page"><div class="head"><div class="l"><span class="eyebrow">Approvals portal / Add client</span><h1>Set up a new client</h1><p class="muted">This creates their folder. Logo, ad accounts and branding can be added in Client settings afterwards.</p></div></div><div class="grid2" style="max-width:1040px"><div class="card">'+
    f("name","Client name","As it should appear in the portal and on Facebook.")+f("website","Website","Used for the display link in previews.")+f("ig","Instagram handle","Without the @.")+f("approverName","Main approver name","The person who signs off ads.")+f("approverEmail","Approver email","They get the portal invite and reminders.")+
@@ -938,9 +955,20 @@ function settingsPage(){
    f("name","Facebook page name","Shown on every ad preview.")+f("ig","Instagram handle","Without the @.")+f("website","Website","Shown as the display link under the image.")+f("landing","Default landing page","Used for new ads. Each ad can change it.")+'</div>'+
    '<div style="display:flex;flex-direction:column;gap:16px"><div class="card"><h2>Ad defaults and accounts</h2><label class="f" for="cs-defaultCta">Default call to action<select class="in" id="cs-defaultCta" data-cf="defaultCta">'+CTAS.map(function(o){return '<option'+(c.defaultCta===o?" selected":"")+'>'+o+'</option>';}).join("")+'</select></label>'+f("metaAccount","Meta ad account")+f("googleId","Google Ads customer ID")+'<label class="f" for="cs-strategist">Strategist<select class="in" id="cs-strategist" data-cf="strategist">'+stratOpts(c.strategist)+'</select></label></div>'+
    '<div class="card"><h2>Client approver</h2>'+f("approverName","Name")+f("approverEmail","Email","Gets the portal invite and reminders.")+'<label class="f" for="cs-reminderDays">Overdue after this many working days<input class="in num" type="number" min="1" max="14" id="cs-reminderDays" data-cf="reminderDays" value="'+esc(c.reminderDays||3)+'"></label></div>'+
-   '<div class="card"><h2>Approval types</h2><span class="small muted">Turn on what this client approves with us. Each type gets its own folders.</span>'+KINDS.map(function(kk){var on=kk.k==="meta"?((c.platforms||{}).meta!==false):!!(c.platforms||{})[kk.k];return '<label class="check"><input type="checkbox" data-plat="'+kk.k+'"'+(on?" checked":"")+'>'+esc(kk.name)+' <span class="small muted">· folders by '+esc(kk.folder.toLowerCase())+'</span></label>';}).join("")+'</div>'+
+   brandsCard(c)+'<div class="card"><h2>Approval types</h2><span class="small muted">Turn on what this client approves with us. Each type gets its own folders.</span>'+KINDS.map(function(kk){var on=kk.k==="meta"?((c.platforms||{}).meta!==false):!!(c.platforms||{})[kk.k];return '<label class="check"><input type="checkbox" data-plat="'+kk.k+'"'+(on?" checked":"")+'>'+esc(kk.name)+' <span class="small muted">· folders by '+esc(kk.folder.toLowerCase())+'</span></label>';}).join("")+'</div>'+
    (function(){var sn=c.strategist,pr=person(sn);return '<div class="card"><h2>Gordon Digital contact</h2>'+(sn?'<div class="ov-team">'+personAv(sn)+'<div><b>'+esc(sn)+'</b><div class="small muted">'+esc([pr.title,pr.email,pr.phone].filter(Boolean).join(" · ")||"No details yet")+'</div></div></div>'+(pr.email?'<span class="small muted">Client emails come from '+esc(pr.email)+'. Their details show on the client\'s overview page.</span>':'<p class="notice">'+esc(sn)+' has no email saved, so client emails come from approvals@notify.gordondigital.com.au. Add it on the Team page.</p>')+'<button type="button" class="btn sm" style="align-self:flex-start" data-act="page" data-v="team">Edit on the Team page</button>':'<p class="notice">Choose a strategist above. Their details show on the overview page and client emails come from them.</p>')+'</div>';})()+
    '<div class="card"><h2>Client portal link</h2><span class="small muted">One private link for everyone at this client. It\'s in every email we send them.</span><button type="button" class="btn sm dark" style="align-self:flex-start" data-act="copyLink">Copy client link</button></div>'+offboardCard(c)+'</div></div></div>';
+}
+function brandsCard(c){
+  var bs=subBrands(c);
+  var h='<div class="card" id="brands-card"><h2>Brands and franchisees</h2><span class="small muted">For one client with several brands or franchisees. Each brand gets its own approver and its own review link, and only sees its own work. Leave the website and socials blank to use '+esc(c.name)+'\'s. Leave the approver blank to use the client approver above.</span>';
+  h+=bs.map(function(b){var bf=function(k,label,ph){return '<label class="f" for="bf-'+esc(b.id)+'-'+k+'">'+label+'<input class="in" id="bf-'+esc(b.id)+'-'+k+'" data-bf="'+esc(b.id)+':'+k+'" value="'+esc(b[k]||"")+'" placeholder="'+esc(ph||"")+'"></label>';};
+    var n=Object.keys(S.ads).filter(function(id){return S.ads[id].clientId===c.id&&S.ads[id].brandId===b.id;}).length;
+    var open=S.openBrand===b.id;
+    return '<div class="brand-row'+(open?" open":"")+'"><div class="row" style="gap:10px;flex-wrap:nowrap">'+logoHtml(brandView(c,{brandId:b.id}))+'<div style="flex:1;min-width:0"><b>'+esc(b.name||"Unnamed brand")+'</b><div class="tiny muted">'+esc(b.approverName||c.approverName||"No approver")+(b.approverEmail?" · "+esc(b.approverEmail):" · client approver")+' · '+n+' item'+(n===1?"":"s")+'</div></div><button type="button" class="btn sm" data-act="copyBrandLink" data-v="'+esc(b.id)+'">Copy link</button><button type="button" class="btn sm" data-act="toggleBrand" data-v="'+esc(b.id)+'">'+(open?"Done":"Edit")+'</button></div>'+
+      (open?'<div class="grid2">'+bf("name","Brand or franchisee name","e.g. Smith Homes Gold Coast")+bf("approverName","Approver name")+bf("approverEmail","Approver email","Separate several with commas")+bf("website","Website",c.website||"")+bf("ig","Instagram handle",c.ig||"")+bf("landing","Default landing page",c.landing||"")+'</div><div class="row" style="justify-content:space-between">'+(assets?'<span class="btn sm filebtn">'+(b.logoId?"Change logo":"Upload logo")+'<input type="file" accept="image/*" data-upload="blogo:'+esc(b.id)+'" aria-label="Upload brand logo"></span>':'')+(S.confirmBrandDel===b.id?'<span class="row"><span class="small">'+(n?n+' item'+(n>1?"s":"")+' will move to '+esc(c.name)+'. ':'')+'Remove this brand?</span><button type="button" class="btn sm" data-act="cancelBrandDel">Keep</button><button type="button" class="btn sm warn-b" data-act="removeBrand" data-v="'+esc(b.id)+'">Remove</button></span>':'<button type="button" class="btn sm" data-act="askBrandDel" data-v="'+esc(b.id)+'">Remove brand</button>')+'</div>':'')+'</div>';}).join("");
+  h+='<div class="row" style="padding-top:10px;border-top:1px solid var(--line)"><label class="f" for="new-brand" style="flex:1;min-width:180px">Add a brand or franchisee<input class="in" id="new-brand" data-newbrand="1" value="'+esc(S.newBrand||"")+'" placeholder="Name"></label><button type="button" class="btn go" style="align-self:flex-end" data-act="addBrand">Add</button></div>';
+  return h+'</div>';
 }
 function offboardCard(c){
   var h='<div class="card"><h2>Offboarding</h2>';
@@ -955,8 +983,8 @@ function teamSettingsPage(){
       return '<div class="sp-edit"><div class="row" style="gap:14px;align-items:flex-start;flex-wrap:nowrap"><div class="sp-photo">'+(dr.photoId?'<img src="'+esc(blob(dr.photoId))+'" alt="">':'<span>'+esc(initials(dr.name||n))+'</span>')+(assets?'<span class="btn sm filebtn">'+(dr.photoId?"Change":"Add photo")+'<input type="file" accept="image/*" data-upload="sphoto" aria-label="Upload photo"></span>':'')+'</div><div class="grid2" style="flex:1">'+
         '<label class="f" for="sp-name">Name<input class="in" id="sp-name" data-spd="name" value="'+esc(dr.name)+'"></label><label class="f" for="sp-title">Role<input class="in" id="sp-title" data-spd="title" value="'+esc(dr.title)+'" placeholder="e.g. Paid Media Strategist"></label>'+
         '<label class="f" for="sp-email">Email<input class="in" type="email" id="sp-email" data-spd="email" value="'+esc(dr.email)+'"></label><label class="f" for="sp-phone">Phone<input class="in" id="sp-phone" data-spd="phone" value="'+esc(dr.phone)+'"></label></div></div>'+
-        '<div class="row" style="justify-content:flex-end"><button type="button" class="btn sm" data-act="cancelStratEdit">Cancel</button><button type="button" class="btn sm dark" data-act="saveStrat">Save</button></div><span class="tiny muted">Clients see the photo, name, role, email and phone on their overview page. Changing the name updates every client and item they own.</span></div>';}
-    return '<div class="sp-row">'+personAv(n)+'<div style="flex:1;min-width:0"><b>'+esc(n)+'</b>'+(pr.title?' <span class="small muted">· '+esc(pr.title)+'</span>':'')+'<div class="tiny muted">'+[pr.email,pr.phone].filter(Boolean).map(esc).join(" · ")+(pr.email||pr.phone?" · ":"")+cnt+' client'+(cnt===1?"":"s")+'</div></div><button type="button" class="btn sm" data-act="editStrat" data-v="'+esc(n)+'">Edit</button><button type="button" class="btn sm" data-act="removeStrat" data-i="'+i+'">Remove</button></div>';}).join("");
+        '<div class="row" style="justify-content:flex-end"><button type="button" class="btn sm" data-act="cancelStratEdit">Cancel</button><button type="button" class="btn sm dark" data-act="saveStrat">Save</button></div><label class="check"><input type="checkbox" data-spapp="1"'+(dr.approvals!==false?" checked":"")+'> Manages clients · show on the Approvals page and Dashboard</label><span class="tiny muted">Untick for people who only load drafts, like a copywriter. They can still be set as the owner of an item. Clients see the photo, name, role, email and phone on their overview page. Changing the name updates every client and item they own.</span></div>';}
+    return '<div class="sp-row">'+personAv(n)+'<div style="flex:1;min-width:0"><b>'+esc(n)+'</b>'+(pr.title?' <span class="small muted">· '+esc(pr.title)+'</span>':'')+(onBoard(n)?'':' <span class="btag">Not on Approvals</span>')+'<div class="tiny muted">'+[pr.email,pr.phone].filter(Boolean).map(esc).join(" · ")+(pr.email||pr.phone?" · ":"")+cnt+' client'+(cnt===1?"":"s")+'</div></div><button type="button" class="btn sm" data-act="editStrat" data-v="'+esc(n)+'">Edit</button><button type="button" class="btn sm" data-act="removeStrat" data-i="'+i+'">Remove</button></div>';}).join("");
   var un=cl.filter(function(c){return !c.strategist||list.indexOf(c.strategist)<0;});
   return '<div class="page"><div class="head"><div class="l"><span class="eyebrow">Gordon Digital portal / Team</span><h1>Strategists</h1><p class="muted">Everyone here can be assigned clients and work. Clients see their strategist\'s details on their overview page.</p></div></div><div class="grid2" style="max-width:1100px"><div class="card"><h2>Current strategists</h2>'+rows+'<div class="row" style="padding-top:12px;border-top:1px solid var(--line)"><label class="f" for="new-strat" style="flex:1;min-width:180px">Add a strategist<input class="in" id="new-strat" data-newstrat="1" value="'+esc(S.newStrat)+'" placeholder="First name"></label><button type="button" class="btn go" style="align-self:flex-end" data-act="addStrat">Add</button></div></div><div class="card"><h2>Clients without a strategist</h2>'+(un.length?un.map(function(c){return '<div class="row" style="justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)"><b>'+esc(c.name)+'</b><button type="button" class="btn sm dark" data-act="openSettings" data-v="'+c.id+'">Assign</button></div>';}).join(""):'<p class="small muted">Every client has a strategist.</p>')+'</div></div></div>';
 }
@@ -968,10 +996,10 @@ function workPage(){
   var c=S.clients[S.clientId];if(!c){S.page="clients";return clientsPage();}
   if(!S.monthKey||monthsFor(c).indexOf(S.monthKey)<0)S.monthKey=(folderList(c,"meta").filter(function(f){return !f.archived;})[0]||{}).id||latestMonth(c);
   if(!S.monthKey)return '<div class="page"><div class="head"><div class="l"><span class="eyebrow">'+esc(c.name)+' / Meta Ads</span><h1>No months yet</h1></div><button type="button" class="btn go" data-act="addMonth">Add the first month</button></div></div>';
-  var ads=adsFor(c.id,S.monthKey);
+  var ads=adsFor(c.id,S.monthKey).filter(inBrandFilter);
   var a=S.ads[S.adId];if(!a||a.clientId!==c.id||a.monthKey!==S.monthKey){a=ads[0]||null;S.adId=a?a.id:null;}
   var h='<div class="head"><div class="l"><span class="eyebrow">'+esc(c.name)+' / Meta Ads'+(folderArchived(c,"meta",S.monthKey)?' · Archived':'')+'</span><h1>'+esc(monthLabel(S.monthKey))+'</h1></div><div class="row">'+archBtn(c,"meta",S.monthKey,ads)+'<button type="button" class="btn" data-act="removeMonth">Remove month</button><button type="button" class="btn" data-act="addAd">Add ad</button><button type="button" class="btn" data-act="copyLink">Copy client link</button><button type="button" class="btn dark" data-act="asClient" data-v="'+c.id+'">Preview as client</button></div></div>';
-  h+=folderArchNotice(c,"meta",S.monthKey,ads);
+  h+=folderArchNotice(c,"meta",S.monthKey,ads)+brandChips(c);
   if(S.confirmMonth===S.monthKey){var dn=ads.length;h+='<div class="notice row" style="justify-content:space-between" role="alert"><span>Remove '+esc(monthLabel(S.monthKey))+'?'+(dn?' This also deletes the '+dn+' draft ad'+(dn>1?"s":"")+' in it.':' It has no ads.')+'</span><span class="row"><button type="button" class="btn sm" data-act="cancelMonth">Keep it</button><button type="button" class="btn sm dark" data-act="confirmMonth">Remove month</button></span></div>';}
   var groups={};ads.forEach(function(x){(groups[x.group||"Ads"]=groups[x.group||"Ads"]||[]).push(x);});
   var ready=ads.filter(canSend);Object.keys(S.batch).forEach(function(id){if(!S.ads[id]||!canSend(S.ads[id])||S.ads[id].clientId!==c.id||S.ads[id].monthKey!==S.monthKey)delete S.batch[id];});
@@ -998,7 +1026,7 @@ function editor(a,c){
     '<label class="f" for="ad-group">Campaign<input class="in" id="ad-group" data-adf="group" value="'+esc(a.group||"")+'"'+(editable?"":" disabled")+'></label>'+sel("dest","Destination (not in name)",DESTS.map(function(x){return [x,x];}))+'</div>'+
     '<label class="f" for="ad-title">Descriptor<input class="in" id="ad-title" data-adf="title" value="'+esc(a.title||"")+'"'+(editable?"":" disabled")+'><span class="h">Plain description of the creative. Written in Title Case in the ad name.</span></label>'+
     '<div class="name-box"><span class="tiny muted">Ad name in Meta</span><span class="mono" id="ad-name">'+esc(nameOf(a))+'</span><span class="tiny muted">[FORMAT] STAGE_Descriptor</span>'+(a.stage?"":'<span class="warn-t">Stage is required. Choose one to complete the ad name.</span>')+'</div>'+
-    '<label class="f" for="ad-owner">Owner<select class="in" id="ad-owner" data-adf="owner">'+stratOpts(a.owner)+'</select></label></div>';
+    '<label class="f" for="ad-owner">Owner<select class="in" id="ad-owner" data-adf="owner">'+stratOpts(a.owner)+'</select></label>'+brandSel(a,c,editable)+'</div>';
   if(a.status!=="draft")h+='<div class="card"><span class="eyebrow">Overall client feedback</span>'+((a.overall||[]).length?a.overall.map(function(cm,ci){return commentHtml(cm,"o",0,ci,true);}).join(""):'<p class="small muted">No overall comments.</p>')+(S.composer==="o0"?composer("o0","o",0,"Reply to the client","Send reply"):'<button type="button" class="btn sm" style="align-self:flex-start" data-act="compose" data-v="o0">Reply to the client</button>')+'</div>';
   h+='<div class="card" style="background:var(--surface-2)"><label class="f" for="ad-internal">Internal notes · never shown to the client<textarea class="in" rows="2" id="ad-internal" data-adf="internal" placeholder="Brief, messaging direction, anything the team needs to know">'+esc(a.internal||"")+'</textarea></label></div>';
   var cN=copyLines(a).filter(lineHasIssue).length,crN=a.creatives.filter(lineHasIssue).length;
@@ -1049,10 +1077,10 @@ var ACT={
   cmonth:function(d){S.cpage="ads";S.kind="meta";S.monthKey=d.v;S.adId=null;S.composer=null;render();},
   addMonth:function(){var c=clone(S.clients[S.clientId]);var ms=monthsFor(c);var k=nextMonthKey(ms[0]);c.months=(c.months||[]).concat([k]);S.monthKey=k;S.page="work";saveClient(c);toast(monthLabel(k)+" added");},
   pickAd:function(d){if(S.adId!==d.v){S.reqChanges=null;S.fileIdx=0;S.pin=null;S.pinFocus=null;}S.adId=d.v;S.pIdx=0;S.hIdx=0;S.expanded=false;S.composer=null;S.confirmDelete=null;render();},
-  addAd:function(){var c=S.clients[S.clientId];var id=uid("ad");var blank=function(n){var r=[];for(var i=0;i<n;i++)r.push(L(""));return r;};
+  addAd:function(){var c=S.clients[S.clientId];var id=uid("ad");var db0=defaultBrand(c);var blank=function(n){var r=[];for(var i=0;i<n;i++)r.push(L(""));return r;};
     var a={id:id,clientId:c.id,monthKey:S.monthKey,order:adsFor(c.id,S.monthKey).length,group:"Campaign",type:"STATIC",stage:"",dest:"Instant Form",title:"New Ad",version:1,status:"draft",owner:c.strategist||"",cta:c.defaultCta||"Learn more",url:c.landing||"",internal:"",reminded:false,
       primaries:blank(5),headlines:blank(5),description:L(""),ctaLine:L(""),creatives:[{text:"",state:"none",comments:[],assetId:null,isVideo:false,fileName:"No file uploaded yet",ratio:"4:5"}],overall:[],note:"",sentAt:null,approvedBy:null,approvedAt:null,createdAt:now()};
-    S.adId=id;S.tab="copy";saveAd(a);toast("Draft ad added");},
+    S.adId=id;S.tab="copy";if(db0)a.brandId=db0;saveAd(a);toast("Draft ad added");},
   tab:function(d){S.tab=d.v;S.composer=null;render();},
   toggleBatch:function(d){if(S.batch[d.v])delete S.batch[d.v];else S.batch[d.v]=1;render();},
   batchAll:function(){var c=S.clients[S.clientId];var ready=itemsIn(c.id,S.kind||"meta",curFolder()).filter(canSend);var all=ready.every(function(x){return S.batch[x.id];});S.batch={};if(!all)ready.forEach(function(x){S.batch[x.id]=1;});render();},
@@ -1095,7 +1123,7 @@ var ACT={
   restoreItem:function(){editAd(function(a){a.status=a.archivedFrom&&a.archivedFrom!=="archived"?a.archivedFrom:"draft";if(a.status==="awaiting")a.status="changes";delete a.archivedFrom;delete a.archivedAt;});toast("Restored. Check it, then send it in the next batch.");},
   unarchiveFolder:function(){var c=S.clients[S.clientId],k=S.kind||"meta",fid=curFolder();var c2=clone(c);if(k==="meta")c2.archivedMonths=(c2.archivedMonths||[]).filter(function(m){return m!==fid;});else c2.folders[k].forEach(function(f){if(f.id===fid)f.archived=false;});saveClient(c2);toast(folderName(c,k,fid)+" is back in the list");},
   removeFolder:function(){var c=S.clients[S.clientId],k=S.kind;if(itemsIn(c.id,k,S.folderId).length)return;var c2=clone(c);var nm=folderName(c,k,S.folderId);c2.folders[k]=c2.folders[k].filter(function(f){return f.id!==S.folderId;});S.folderId=null;saveClient(c2);toast(nm+" removed");},
-  addItem:function(){var c=S.clients[S.clientId];var a=newItem(c,S.kind,S.folderId,itemsIn(c.id,S.kind,S.folderId).length);S.adId=a.id;S.fileIdx=0;saveAd(a);toast(K(S.kind).unit[0].toUpperCase()+K(S.kind).unit.slice(1)+" added");},
+  addItem:function(){var c=S.clients[S.clientId];var a=newItem(c,S.kind,S.folderId,itemsIn(c.id,S.kind,S.folderId).length);var db0=defaultBrand(c);if(db0)a.brandId=db0;S.adId=a.id;S.fileIdx=0;saveAd(a);toast(K(S.kind).unit[0].toUpperCase()+K(S.kind).unit.slice(1)+" added");},
   removeFeatured:function(){editAd(function(a){delete a.featured;});toast("Featured image removed");},
   gShuffle:function(){S.gComb=(S.gComb||0)+1;render();},
   fileTab:function(d){S.fileIdx=+d.i;S.pin=null;S.pinFocus=null;render();},
@@ -1109,6 +1137,16 @@ var ACT={
     editAd(function(a){var list=d.k==="o"?a.overall:(d.k==="fi"?(a.featured||{}).comments:getLine(a,d.k,+d.i).comments);var c=list&&list[+d.ci];if(!c)return;c.replies=(c.replies||[]).concat([cm]);});toast("Reply added");},
   storyCard:function(d){S.sci=Math.max(0,(S.sci||0)+(+d.v));render();},
   tourStart:function(){tourStart();},
+  brandFilter:function(d){S.brandFilter=S.brandFilter||{};S.brandFilter[S.clientId]=d.v;S.adId=null;render();},
+  addBrand:function(){var c=S.clients[S.clientId];var nm=String(S.newBrand||"").trim();if(!nm){toast("Add a name first.");return;}var c2=clone(c);c2.brands=subBrands(c2).concat([{id:uid("br"),name:nm}]);S.openBrand=c2.brands[c2.brands.length-1].id;S.newBrand="";saveClient(c2);toast(nm+" added. Add their approver below.");},
+  toggleBrand:function(d){S.openBrand=S.openBrand===d.v?null:d.v;S.confirmBrandDel=null;render();},
+  askBrandDel:function(d){S.confirmBrandDel=d.v;render();},
+  cancelBrandDel:function(){S.confirmBrandDel=null;render();},
+  removeBrand:function(d){var c=S.clients[S.clientId];var c2=clone(c);c2.brands=subBrands(c2).filter(function(b){return b.id!==d.v;});S.confirmBrandDel=null;S.openBrand=null;saveClient(c2);
+    Object.keys(S.ads).forEach(function(id){var x=S.ads[id];if(x.clientId===c.id&&x.brandId===d.v){var x2=clone(x);delete x2.brandId;saveAd(x2);}});
+    if(GDA.clientAction)GDA.clientAction(c.id,"revokeBrand:"+d.v).catch(function(){});toast("Brand removed");},
+  copyBrandLink:function(d){var c=S.clients[S.clientId];if(!GDA.reviewLink){toast("Review links aren't available here.");return;}var b=subBrand(c,d.v);
+    GDA.reviewLink(c.id,d.v).then(function(url){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(function(){toast((b&&b.name||"Brand")+" link copied");},function(){toast(url);});}else toast(url);},function(e){toast((e&&e.message)||"Couldn't make a link");});},
   askClientArch:function(d){S.confirmArch=d.v;render();},
   cancelClientArch:function(){S.confirmArch=null;render();},
   archiveClient:function(d){var c=S.clients[d.v];if(!c)return;S.confirmArch=null;var c2=clone(c);c2.archived=true;c2.archivedAt=now();c2.archivedBy=(S.me&&S.me.name)||"";saveClient(c2);
@@ -1152,11 +1190,11 @@ var ACT={
   removeCreative:function(d){editAd(function(a){a.creatives.splice(+d.i,1);if(!a.creatives.length)a.creatives.push({text:"",state:"none",comments:[],assetId:null,isVideo:false,fileName:"No file uploaded yet",ratio:"4:5"});});},
   copyLink:function(){var c=S.clients[S.clientId];if(!c)return;if(!GDA.reviewLink){toast("Review links aren't available here.");return;}
     GDA.reviewLink(c.id).then(function(url){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(function(){toast("Client link copied");},function(){toast(url);});}else toast(url);},function(e){toast((e&&e.message)||"Couldn't make a link");});},
-  editStrat:function(d){var pr=person(d.v);S.editStrat=d.v;S.spDraft={name:d.v,title:pr.title||"",email:pr.email||"",phone:pr.phone||"",photoId:pr.photoId||null};render();},
+  editStrat:function(d){var pr=person(d.v);S.editStrat=d.v;S.spDraft={name:d.v,title:pr.title||"",email:pr.email||"",phone:pr.phone||"",photoId:pr.photoId||null,approvals:onBoard(d.v)};render();},
   cancelStratEdit:function(){S.editStrat=null;S.spDraft=null;render();},
   saveStrat:function(){var old=S.editStrat,dr=S.spDraft||{},nm=String(dr.name||"").trim();if(!nm){toast("Name can't be empty.");return;}
     var list=strats().slice();if(nm!==old&&list.some(function(x){return x.toLowerCase()===nm.toLowerCase();})){toast(nm+" is already on the team.");return;}
-    var pp=clone(people());delete pp[old];pp[nm]={title:String(dr.title||"").trim(),email:String(dr.email||"").trim(),phone:String(dr.phone||"").trim(),photoId:dr.photoId||null};
+    var pp=clone(people());delete pp[old];pp[nm]={title:String(dr.title||"").trim(),email:String(dr.email||"").trim(),phone:String(dr.phone||"").trim(),photoId:dr.photoId||null,approvals:dr.approvals!==false};
     list=list.map(function(x){return x===old?nm:x;});
     if(nm!==old){clientList().forEach(function(c){if(c.strategist===old){var c2=clone(c);c2.strategist=nm;saveClient(c2);}});Object.keys(S.ads).forEach(function(id){var a=S.ads[id];if(a.owner===old){var a2=clone(a);a2.owner=nm;saveAd(a2);}});if(S.strat===old)S.strat=nm;}
     S.editStrat=null;S.spDraft=null;saveTeam(list,pp);toast("Saved");},
@@ -1182,6 +1220,7 @@ document.addEventListener("input",function(e){var t=e.target;
   if(t.dataset.pdraft){S.pdraft=t.value;return;}
   if(t.dataset.rdraft){S.rdraft=t.value;return;}
   if(t.dataset.delname){S.delName=t.value;return;}
+  if(t.dataset.newbrand){S.newBrand=t.value;return;}
   if(t.dataset.odraft){S.odraft=t.value;var pb=document.getElementById("c-post");if(pb&&pb.dataset.v!=="changes")pb.disabled=!t.value.trim();else if(pb&&t.value.trim())pb.disabled=false;t.style.height="auto";t.style.height=Math.min(t.scrollHeight,200)+"px";return;}
   if(t.dataset.bd){S.bd[t.dataset.bd]=t.value;if(t.dataset.bd==="chex"){var sw=document.getElementById("hex-sw");if(sw)sw.style.background=normHex(t.value)||"transparent";}return;}
   if(t.dataset.newstrat){S.newStrat=t.value;return;}
@@ -1192,6 +1231,8 @@ document.addEventListener("input",function(e){var t=e.target;
 document.addEventListener("change",function(e){var t=e.target;
   if(t.dataset.placement){S.placement=t.value;render();return;}
   if(t.dataset.showchanges){S.showChanges=t.checked;render();return;}
+  if(t.dataset.spapp){if(S.spDraft)S.spDraft.approvals=t.checked;return;}
+  if(t.dataset.bf){var bp=t.dataset.bf.split(":"),bc=S.clients[S.clientId];if(!bc)return;var bc2=clone(bc);bc2.brands=subBrands(bc2).map(function(b){if(b.id===bp[0]){b[bp[1]]=bp[1]==="ig"?t.value.replace(/^@/,"").trim():t.value.trim();}return b;});saveClient(bc2);return;}
   if(t.dataset.showresolved){S.showResolved=t.checked;render();return;}
   if(t.dataset.dashstrat){S.dashStrat=t.value;render();return;}
   if(t.dataset.splatview){S.splat=t.value;render();return;}
@@ -1223,6 +1264,7 @@ document.addEventListener("change",function(e){var t=e.target;
     if(kind==="kfile"){var ka=curAd();if(ka&&kindOf(ka)==="social"){var kh=(ka.creatives||[]).length;if(kh+files.length>20){toast("Carousels take up to 20 slides. Only the first "+Math.max(0,20-kh)+" will be added.");files=files.slice(0,Math.max(0,20-kh));if(!files.length)return;}}var kn=0,kt=files.length;
       files.reduce(function(chain,f){return chain.then(function(){toast("Uploading "+(++kn)+" of "+kt+": "+f.name+"…");return Promise.all([upload(f),measure(f)]).then(function(res){var r=res[0],dm=res[1];var vid=(r.contentType||f.type||"").indexOf("video")===0;
         editAd(function(a){a.creatives=(a.creatives||[]).concat([{text:"",state:"none",comments:[],assetId:r.id,isVideo:vid,type:r.contentType||f.type||"",fileName:f.name,size:f.size,label:"",w:dm?dm.w:null,h:dm?dm.h:null}]);});},uploadErr);});},Promise.resolve()).then(function(){toast(kt>1?kt+" files uploaded":files[0].name+" uploaded");});return;}
+    if(kind.indexOf("blogo:")===0){var bid=kind.slice(6),bl=files[0];toast("Uploading "+bl.name+"…");upload(bl).then(function(r){var bc=clone(S.clients[S.clientId]);bc.brands=subBrands(bc).map(function(b){if(b.id===bid)b.logoId=r.id;return b;});saveClient(bc);toast("Logo updated");},uploadErr);return;}
     if(kind==="logo"){var f0=files[0];toast("Uploading "+f0.name+"…");upload(f0).then(function(r){var c2=clone(S.clients[S.clientId]);c2.logoId=r.id;saveClient(c2);toast("Logo updated");},uploadErr);return;}
     var ad0=curAd();if(ad0&&ad0.type==="CAROUSEL"&&files.length+ad0.creatives.filter(function(c){return c.assetId;}).length>20){toast("Carousels take up to 10 feed cards and 10 Stories cards.");files=files.slice(0,Math.max(0,20-ad0.creatives.filter(function(c){return c.assetId;}).length));if(!files.length)return;}
     var n=0,total=files.length;
