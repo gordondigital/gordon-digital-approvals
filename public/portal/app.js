@@ -161,6 +161,7 @@ function render(){
   else{nav.innerHTML=teamNav();main.innerHTML=teamPage();}
   var y2=main.querySelector(".work.wide,.cw-main,.col-main,.page");if(y2&&keep)y2.scrollTop=keep;
   fetchProfiles();
+  if(S.mode==="client")tourMaybe();
 }
 
 /* ---------- shared bits ---------- */
@@ -684,10 +685,10 @@ function overviewPage(){
   var items=allItems(c.id).filter(function(x){return seen(x);});
   var waiting=items.filter(function(x){return x.status==="awaiting";}).sort(function(a,b){return (a.sentAt||"").localeCompare(b.sentAt||"");});
   var first=String(c.approverName||"").split(" ")[0];
-  var h='<div class="page"><div class="head"><div class="l"><span class="eyebrow">'+esc(c.name)+' / Overview</span><h1>'+(first?"Hi "+esc(first):"Welcome")+'</h1><span class="muted">Everything Gordon Digital has sent you to review, in one place.</span></div></div>';
+  var h='<div class="page"><div class="head"><div class="l"><span class="eyebrow">'+esc(c.name)+' / Overview</span><h1>'+(first?"Hi "+esc(first):"Welcome")+'</h1><span class="muted">Everything Gordon Digital has sent you to review, in one place.</span></div><button type="button" class="btn sm" data-act="tourStart">Take the tour</button></div>';
   var nx=waiting[0];
-  h+='<div class="card ov-next">'+(waiting.length?'<div class="row" style="justify-content:space-between;gap:16px"><div><h2>'+waiting.length+' '+(waiting.length===1?"item needs":"items need")+' your approval</h2><span class="small muted">Oldest first: '+esc(nx.title)+' · '+esc(K(kindOf(nx)).name)+' · sent '+esc(shortDate(nx.sentAt))+'</span></div><button type="button" class="btn dark" data-act="goItem" data-v="'+nx.id+'">Start reviewing</button></div>':'<h2>You\'re all caught up</h2><span class="small muted">Nothing is waiting on you right now.</span>')+'</div>';
-  h+=progressBoard(c,items);
+  h+='<div class="card ov-next" id="tour-next">'+(waiting.length?'<div class="row" style="justify-content:space-between;gap:16px"><div><h2>'+waiting.length+' '+(waiting.length===1?"item needs":"items need")+' your approval</h2><span class="small muted">Oldest first: '+esc(nx.title)+' · '+esc(K(kindOf(nx)).name)+' · sent '+esc(shortDate(nx.sentAt))+'</span></div><button type="button" class="btn dark" data-act="goItem" data-v="'+nx.id+'">Start reviewing</button></div>':'<h2>You\'re all caught up</h2><span class="small muted">Nothing is waiting on you right now.</span>')+'</div>';
+  h+='<div id="tour-progress">'+progressBoard(c,items)+'</div>';
   var ev=[];items.forEach(function(x){
     if(x.sentAt)ev.push({at:x.sentAt,t:"Gordon Digital sent "+x.title+" for review",x:x});
     if(x.approvedAt)ev.push({at:x.approvedAt,t:"Approved: "+x.title,x:x});
@@ -695,7 +696,7 @@ function overviewPage(){
     (x.overall||[]).forEach(push);(linesOfKind(x)||allLines(x)).forEach(function(l){(l&&l.comments||[]).forEach(push);});});
   ev.sort(function(a,b){return b.at.localeCompare(a.at);});
   var sn=c.strategist,pr=person(sn),em=pr.email||c.gdEmail,ph=pr.phone||c.gdPhone;
-  var team='<div class="card"><h2>Your team</h2><div class="ov-team">'+personAv(sn||"GD","lg2")+'<div><b>'+esc(sn||"Gordon Digital")+'</b><div class="small muted">'+esc(pr.title||"Your strategist")+' at Gordon Digital</div>'+(em||ph?'<div class="small" style="display:flex;flex-direction:column;gap:2px;margin-top:6px">'+(em?'<a href="mailto:'+esc(em)+'" style="color:inherit">'+esc(em)+'</a>':'')+(ph?'<a href="tel:'+esc(String(ph).replace(/\s+/g,""))+'" style="color:inherit">'+esc(ph)+'</a>':'')+'</div>':'')+'</div></div>'+(c.approverName?'<div class="ov-team" style="border-top:1px solid var(--line);padding-top:12px"><span class="logo" style="border-radius:999px">'+esc(initials(c.approverName))+'</span><div><b class="small">'+esc(c.approverName)+'</b><div class="tiny muted">Approver at '+esc(c.name)+'</div></div></div>':'')+'</div>';
+  var team='<div class="card" id="tour-team"><h2>Your team</h2><div class="ov-team">'+personAv(sn||"GD","lg2")+'<div><b>'+esc(sn||"Gordon Digital")+'</b><div class="small muted">'+esc(pr.title||"Your strategist")+' at Gordon Digital</div>'+(em||ph?'<div class="small" style="display:flex;flex-direction:column;gap:2px;margin-top:6px">'+(em?'<a href="mailto:'+esc(em)+'" style="color:inherit">'+esc(em)+'</a>':'')+(ph?'<a href="tel:'+esc(String(ph).replace(/\s+/g,""))+'" style="color:inherit">'+esc(ph)+'</a>':'')+'</div>':'')+'</div></div>'+(c.approverName?'<div class="ov-team" style="border-top:1px solid var(--line);padding-top:12px"><span class="logo" style="border-radius:999px">'+esc(initials(c.approverName))+'</span><div><b class="small">'+esc(c.approverName)+'</b><div class="tiny muted">Approver at '+esc(c.name)+'</div></div></div>':'')+'</div>';
   h+='<div class="grid2"><div class="card"><h2>Recent activity</h2>'+(ev.length?'<div class="ov-list">'+ev.slice(0,10).map(function(e){return '<div class="ov-ev"><span class="tiny muted num" style="width:58px;flex-shrink:0">'+esc(shortDate(e.at))+'</span><span class="small">'+esc(e.t)+'</span></div>';}).join("")+'</div>':'<p class="small muted">Nothing yet.</p>')+'</div>'+team+'</div>';
   return h+'</div>';
 }
@@ -1090,6 +1091,7 @@ var ACT={
   sendReply:function(d){var t=String(S.rdraft||"").trim();if(!t){toast("Write a reply first.");return;}var cm=commentObj(t);S.replyKey=null;S.rdraft="";
     editAd(function(a){var list=d.k==="o"?a.overall:(d.k==="fi"?(a.featured||{}).comments:getLine(a,d.k,+d.i).comments);var c=list&&list[+d.ci];if(!c)return;c.replies=(c.replies||[]).concat([cm]);});toast("Reply added");},
   storyCard:function(d){S.sci=Math.max(0,(S.sci||0)+(+d.v));render();},
+  tourStart:function(){tourStart();},
   cpage:function(d){S.cpage=d.v;S.composer=null;render();},
   addColour:function(){var hex=normHex(S.bd.chex);if(!hex){toast("Enter a hex code, e.g. 001D21.");return;}var nm=(S.bd.cname||"").trim();editBrand(function(b){b.colours.push({name:nm,hex:hex});});S.bd.cname="";S.bd.chex="";toast(hex+" added");},
   addFont:function(){var nm=(S.bd.fname||"").trim();if(!nm){toast("Choose a Google font first.");return;}var match=GFONTS.filter(function(g){return g.toLowerCase()===nm.toLowerCase();})[0];var use=(S.bd.fuse||"").trim();editBrand(function(b){b.fonts.push({name:match||nm,use:use,source:"google"});});S.bd.fname="";S.bd.fuse="";toast((match||nm)+" added");},
@@ -1202,6 +1204,45 @@ document.addEventListener("change",function(e){var t=e.target;
       },uploadErr);});},Promise.resolve()).then(function(){toast(total>1?total+" files uploaded":files[0].name+" uploaded");});
   }
 });
+
+/* ---------- first visit tour (clients) ---------- */
+var TOUR=null;
+function tourKey(){return "gda_tour_"+(GDA.client||"")+"_"+((S.me&&S.me.id)||"");}
+function tourDone(){try{return localStorage.getItem(tourKey())==="1";}catch(e){return true;}}
+function tourSteps(){var c=S.clients[S.asClient]||{},sn=c.strategist||"your strategist",first=String(c.approverName||"").split(" ")[0];
+  return [
+    {title:"Welcome"+(S.me&&S.me.name?", "+esc(String(S.me.name).split(" ")[0]):""),body:"This is where you review and approve everything Gordon Digital makes for "+esc(c.name||"you")+". Here's a 30 second look around."},
+    {sel:"#tour-next",title:"What needs you",body:"This shows how many items are waiting on your approval. <b>Start reviewing</b> takes you to the oldest one first."},
+    {sel:"#tour-progress",maxH:230,title:"Where everything is up to",body:"Every item sits in a column: <b>Waiting on you</b>, <b>Being updated</b> (we're making your changes), <b>Approved</b> and <b>Live</b>. Click any card to open it."},
+    {sel:"#nav .nav-label",wide:"#nav",title:"Folders for each type of work",body:"Ads, pages, content and social each have their own folders. The number beside a folder is how many items in it are waiting on you."},
+    {sel:'#nav [data-act="cpage"][data-v="assets"]',title:"Your brand assets",body:"Logos, colours, fonts and images we use for your work. You can add new photos or files here any time."},
+    {sel:"#tour-team",title:"Your team",body:esc(sn)+" looks after you. Their email and phone are here if you'd rather talk something through."},
+    {title:"How reviewing works",body:"<ol class='tour-ol'><li>Open an item and press <b>Comment</b> on anything you'd like changed. On page designs, just click the spot.</li><li>No changes? Press <b>Approve</b>.</li><li>Small edits we can just make? <b>Approve with changes</b>.</li><li>Want to see it again first? <b>Submit changes</b>.</li></ol><span class='small muted'>The first time you approve on a device, we email you a 6 digit code to confirm it's you.</span>",last:true}
+  ];}
+function tourEl(){var el=document.getElementById("gda-tour");if(!el){el=document.createElement("div");el.id="gda-tour";el.innerHTML='<div class="tour-hole"></div><div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-t"></div>';document.body.appendChild(el);
+  el.addEventListener("click",function(e){var b=e.target.closest("[data-tour]");if(!b){if(e.target===el)tourEnd();return;}var a=b.dataset.tour;if(a==="next")tourGo(TOUR.i+1);else if(a==="back")tourGo(TOUR.i-1);else if(a==="skip"||a==="done")tourEnd();else if(a==="review"){tourEnd();var w=allItems(S.asClient).filter(function(x){return x.status==="awaiting";}).sort(function(p,q){return (p.sentAt||"").localeCompare(q.sentAt||"");})[0];if(w)ACT.goItem({v:w.id});}});}
+  return el;}
+function tourPlace(){if(!TOUR)return;var el=tourEl(),st=TOUR.steps[TOUR.i],hole=el.querySelector(".tour-hole"),card=el.querySelector(".tour-card");
+  var t=st.sel?document.querySelector(st.wide&&window.innerWidth>760?st.wide:st.sel):null;
+  if(t&&!TOUR.scrolled){TOUR.scrolled=true;try{t.scrollIntoView({block:st.maxH?"start":"nearest",behavior:"smooth"});}catch(e){}}
+  if(!t){el.classList.add("center");hole.style.cssText="";card.style.cssText="";return;}
+  el.classList.remove("center");var r0=t.getBoundingClientRect(),pad=6,mh=st.maxH||Math.max(120,window.innerHeight-40);var r={top:r0.top,left:r0.left,width:r0.width,right:r0.right,height:Math.min(r0.height,mh)};r.bottom=r.top+r.height;
+  hole.style.cssText="top:"+(r.top-pad)+"px;left:"+(r.left-pad)+"px;width:"+(r.width+pad*2)+"px;height:"+(r.height+pad*2)+"px";
+  if(window.innerWidth<=760){card.style.cssText="left:12px;right:12px;bottom:12px;top:auto";return;}
+  var cw=340,ch=card.offsetHeight||200,vw=window.innerWidth,vh=window.innerHeight,top,left;
+  if(r.right+cw+24<vw){left=r.right+16;top=Math.min(Math.max(12,r.top),vh-ch-12);}
+  else if(r.bottom+ch+24<vh){top=r.bottom+14;left=Math.min(Math.max(12,r.left),vw-cw-12);}
+  else{top=Math.max(12,r.top-ch-14);left=Math.min(Math.max(12,r.left),vw-cw-12);}
+  card.style.cssText="top:"+top+"px;left:"+left+"px;width:"+cw+"px";}
+function tourGo(i){if(!TOUR)return;TOUR.i=Math.max(0,Math.min(i,TOUR.steps.length-1));TOUR.scrolled=false;var st=TOUR.steps[TOUR.i],n=TOUR.steps.length,el=tourEl();
+  el.querySelector(".tour-card").innerHTML='<span class="tiny muted">'+(TOUR.i+1)+' of '+n+'</span><h2 id="tour-t">'+st.title+'</h2><div class="small tour-b">'+st.body+'</div><div class="row tour-btns">'+(TOUR.i===0?'<button type="button" class="btn sm" data-tour="skip">Skip</button>':'<button type="button" class="btn sm" data-tour="back">Back</button>')+(st.last?(allItems(S.asClient).some(function(x){return x.status==="awaiting";})?'<button type="button" class="btn sm dark" data-tour="review">Start reviewing</button>':'<button type="button" class="btn sm dark" data-tour="done">Done</button>'):'<button type="button" class="btn sm dark" data-tour="next">'+(TOUR.i===0?"Show me":"Next")+'</button>')+'</div>';
+  tourPlace();setTimeout(tourPlace,350);var nb=el.querySelector('[data-tour="next"],[data-tour="review"],[data-tour="done"]');if(nb)try{nb.focus({preventScroll:true});}catch(e){}}
+function tourStart(){if(S.mode!=="client")return;if(S.cpage!=="overview"){S.cpage="overview";render();}TOUR={i:0,steps:tourSteps()};document.body.classList.add("touring");tourEl().hidden=false;tourGo(0);
+  if(!TOUR.t)TOUR.t=setInterval(tourPlace,400);}
+function tourEnd(){if(!TOUR)return;clearInterval(TOUR.t);TOUR=null;document.body.classList.remove("touring");var el=document.getElementById("gda-tour");if(el)el.hidden=true;if(GDA.client){try{localStorage.setItem(tourKey(),"1");}catch(e){}}}
+function tourMaybe(){if(!GDA.client||TOUR||S.cpage!=="overview"||!S.loadedA||!S.me||tourDone()||tourMaybe.tried)return;tourMaybe.tried=true;setTimeout(function(){if(!TOUR&&S.cpage==="overview")tourStart();},700);}
+window.addEventListener("resize",function(){tourPlace();});
+document.addEventListener("keydown",function(e){if(!TOUR)return;if(e.key==="Escape")tourEnd();else if(e.key==="ArrowRight"&&!TOUR.steps[TOUR.i].last)tourGo(TOUR.i+1);else if(e.key==="ArrowLeft")tourGo(TOUR.i-1);});
 
 /* ---------- boot ---------- */
 var perms=null,loadTries=0;

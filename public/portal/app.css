@@ -514,3 +514,15 @@ button.pin.sm{cursor:pointer;font-family:inherit}
 .pdiff{display:flex;flex-direction:column;gap:8px}
 .diff.para{padding:8px 10px;background:var(--surface-2);border-radius:8px}
 .tg-row{gap:16px;flex-wrap:wrap}
+
+/* first visit tour */
+#gda-tour{position:fixed;inset:0;z-index:1200}
+#gda-tour[hidden]{display:none}
+#gda-tour .tour-hole{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(0,29,33,.55);transition:all .25s ease;pointer-events:none}
+#gda-tour.center .tour-hole{top:50%;left:50%;width:0;height:0}
+#gda-tour .tour-card{position:fixed;background:var(--surface);color:var(--ink);border-radius:14px;padding:18px 20px;box-shadow:0 12px 32px rgba(0,29,33,.25);display:flex;flex-direction:column;gap:8px;transition:top .25s ease,left .25s ease}
+#gda-tour.center .tour-card{top:50%;left:50%;transform:translate(-50%,-50%);width:min(420px,calc(100vw - 32px))}
+#gda-tour .tour-card h2{margin:0;font-size:19px}
+.tour-b{line-height:1.5}
+.tour-ol{margin:4px 0 8px;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.tour-btns{justify-content:space-between;margin-top:6px}
