@@ -533,3 +533,9 @@ button.pin.sm{cursor:pointer;font-family:inherit}
 .del-box{display:flex;flex-direction:column;gap:8px;flex-basis:100%;padding:12px;border:1px solid #f1c2bd;background:#fdf1f0;border-radius:10px}
 .del-box .in{flex:1;min-width:180px}
 .btn.warn-b{background:var(--warn);border-color:var(--warn);color:#fff}
+
+/* tables in content */
+.rich table,.rte-ed table,.doc table{border-collapse:collapse;margin:0 0 14px;max-width:100%;display:block;overflow-x:auto;font-size:14px}
+.rich td,.rich th,.rte-ed td,.rte-ed th,.doc td,.doc th{border:1px solid var(--line-strong);padding:7px 10px;vertical-align:top;text-align:left;min-width:80px}
+.rich tr:first-child td,.rte-ed tr:first-child td,.rich th,.rte-ed th{background:var(--surface-2)}
+.rich td p,.rte-ed td p,.rich th p,.rte-ed th p{margin:0}
