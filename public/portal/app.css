@@ -545,3 +545,11 @@ button.pin.sm{cursor:pointer;font-family:inherit}
 .brand-chips{margin:-6px 0 0}
 .brand-row{display:flex;flex-direction:column;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
 .brand-row.open{background:var(--surface-2);margin:0 -12px;padding:12px;border-radius:10px}
+
+/* reorder files */
+.dragrow{cursor:grab}
+.dragrow.dragging{opacity:.45}
+.dragrow.drop-on{outline:2px dashed var(--sky);outline-offset:2px}
+.slide-n{display:inline-flex;align-items:center;gap:4px;font-weight:700;font-size:13px;color:var(--muted);min-width:28px}
+.grip{letter-spacing:-3px;color:var(--faint)}
+.mv .btn{padding:4px 9px}
