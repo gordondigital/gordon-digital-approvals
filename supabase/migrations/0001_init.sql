@@ -136,10 +136,10 @@ do $$ begin
   begin execute 'alter publication supabase_realtime add table public.settings'; exception when others then null; end;
 end $$;
 
--- Private bucket for creative, designs, logos and brand files (50 MB per file)
+-- Private bucket for creative, designs, logos and brand files (200 MB per file)
 insert into storage.buckets (id, name, public, file_size_limit)
-values ('media', 'media', false, 52428800)
-on conflict (id) do update set public = false, file_size_limit = 52428800;
+values ('media', 'media', false, 209715200)
+on conflict (id) do update set public = false, file_size_limit = 209715200;
 
 drop policy if exists team_media_all on storage.objects;
 create policy team_media_all on storage.objects for all to authenticated
